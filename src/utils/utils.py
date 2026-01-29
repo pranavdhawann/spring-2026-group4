@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -20,3 +21,13 @@ def working_directory_to_src(
     print("Path set to :", os.getcwd())
 
     return 1
+
+
+def read_jsonl(path):
+    assert os.path.exists(path), f"{path} does not exist"
+    data = []
+    with open(path, "r") as file:
+        for line in file:
+            data.append(json.loads(line))
+
+    return data
