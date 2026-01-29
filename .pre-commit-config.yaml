@@ -29,10 +29,3 @@ repos:
     hooks:
       - id: flake8
         args: ["--max-line-length=200"]
-
-  # Strip notebook outputs
-  - repo: https://github.com/kynan/nbstripout
-    rev: 0.6.1
-    hooks:
-      - id: nbstripout
-        exclude: ^notebooks/
