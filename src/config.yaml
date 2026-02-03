@@ -1,0 +1,4 @@
+DATA_FOLDER: '../data'
+NEWS_FOLDER: '../data/multi-modal-dataset/sp500_news'
+DATA_DICTIONARY: '../data/multi-modal-dataset/sp500stock_data_description.csv'
+STOCK_SCORE_NEWS: '../data/multi-modal-dataset/stock_scores_news_1.csv'
