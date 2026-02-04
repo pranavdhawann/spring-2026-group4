@@ -14,12 +14,29 @@ def read_yaml(path):
     return config
 
 
-def working_directory_to_src(
-    parent_level=0,
-):  # 0 is the 1st parent of the directory you are currently working
-    project_root = Path().resolve().parents[0]
-    os.chdir(str(project_root))
-    print("Path set to :", os.getcwd())
+def working_directory_to_src():
+    current_path = Path().resolve()
+    project_root = None
+    for parent in current_path.parents:
+        if parent.name == "spring-2026-group4":
+            project_root = parent
+            break
+
+    if project_root is None:
+        for parent in current_path.parents:
+            if (parent / "src").exists():
+                project_root = parent
+                break
+        else:
+            print("Could not find project root. Staying in current directory.")
+            return 0
+    src_path = project_root / "src"
+    if not src_path.exists():
+        print(f"Warning: {src_path} does not exist. Creating it.")
+        src_path.mkdir(parents=True)
+
+    os.chdir(str(src_path))
+    print("Path set to:", os.getcwd())
 
     return 1
 
