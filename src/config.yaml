@@ -3,3 +3,8 @@ DATA_FOLDER: '../data'
 NEWS_FOLDER: '../data/multi-modal-dataset/sp500_news'
 DATA_DICTIONARY: '../data/multi-modal-dataset/sp500stock_data_description.csv'
 STOCK_SCORE_NEWS: '../data/multi-modal-dataset/stock_scores_news_1.csv'
+VOCAB_OUTPUT_DIR: '../data/vocab_result'
+CHAR_VOCAB_FILE: 'char_vocab.txt'
+CHAR_TO_ID_FILE: 'char_to_id.json'
+ID_TO_CHAR_FILE: 'id_to_char.json'
+
