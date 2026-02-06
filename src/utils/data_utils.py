@@ -2,11 +2,19 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import Optional, List, Tuple
+from utils import read_yaml
 
+# Load configuration
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
-STOCK_DATA_DIR = DATA_DIR / "S&P500_time_series"
-ANALYSIS_DIR = DATA_DIR / "analysis_results"
+CONFIG_PATH = PROJECT_ROOT / "src" / "config.yaml"
+CONFIG = read_yaml(str(CONFIG_PATH))
+
+# Set paths from config
+DATA_DIR = PROJECT_ROOT / CONFIG['DATA_FOLDER'].lstrip('../')
+STOCK_DATA_DIR = PROJECT_ROOT / CONFIG['STOCK_DATA_FOLDER'].lstrip('../')
+ANALYSIS_DIR = PROJECT_ROOT / CONFIG['ANALYSIS_FOLDER'].lstrip('../')
+NEWS_DIR = PROJECT_ROOT / CONFIG['NEWS_FOLDER'].lstrip('../')
+DATA_DICT_PATH = PROJECT_ROOT / CONFIG['DATA_DICTIONARY'].lstrip('../')
 
 
 def get_project_paths():
@@ -14,7 +22,9 @@ def get_project_paths():
         'project_root': PROJECT_ROOT,
         'data': DATA_DIR,
         'stock_data': STOCK_DATA_DIR,
-        'analysis': ANALYSIS_DIR
+        'analysis': ANALYSIS_DIR,
+        'news': NEWS_DIR,
+        'data_dictionary': DATA_DICT_PATH
     }
 
 
