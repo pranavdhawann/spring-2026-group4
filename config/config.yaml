@@ -1,1 +1,11 @@
+DATA_FOLDER: 'data'
+NEWS_FOLDER: 'data/multi-modal-dataset/sp500_news'
+TIMES_SERIES_FOLDER: 'data/multi-modal-dataset/sp500_time_series'
+DATA_DICTIONARY: 'data/multi-modal-dataset/sp500stock_data_description.csv'
+STOCK_SCORE_NEWS: 'data/multi-modal-dataset/stock_scores_news_1.csv'
 
+ANALYSIS_FOLDER: 'data/analysis_results'
+YOY_ANALYSIS_FILE: 'data/analysis_results/yoy_analysis_full.csv'
+YEARLY_SUMMARY_FILE: 'data/analysis_results/yearly_summary_full.csv'
+ALL_STOCKS_RANKED_FILE: 'data/analysis_results/all_stocks_ranked.csv'
+ALL_STOCKS_RANKED_TXT: 'data/analysis_results/all_stocks_ranked.txt'
