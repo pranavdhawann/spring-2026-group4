@@ -1,14 +1,27 @@
 import pandas as pd
-from datetime import datetime
+import os
+import sys
 from pathlib import Path
 
-from eda_utils import (
+
+if os.path.basename(os.getcwd()) == 'EDA':
+    os.chdir('../../')
+    sys.path.append(os.getcwd())
+elif os.path.exists('src'):
+    if os.getcwd() not in sys.path:
+        sys.path.append(os.getcwd())
+
+from src.utils import working_directory_to_src
+working_directory_to_src()
+
+from cookbooks.EDA.eda_utils import (
     get_data_paths,
     save_ticker_list,
     load_yoy_analysis,
     aggregate_ticker_metrics,
     calculate_quality_score
 )
+
 
 def rank_all_stocks(ticker_metrics):
     print("Ranking all stocks by quality score...")

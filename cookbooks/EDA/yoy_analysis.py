@@ -1,13 +1,23 @@
 import pandas as pd
-import numpy as np
+import os
+import sys
 from pathlib import Path
+
+if os.path.basename(os.getcwd()) == 'EDA':
+    os.chdir('../../')
+    sys.path.append(os.getcwd())
+elif os.path.exists('src'):
+    if os.getcwd() not in sys.path:
+        sys.path.append(os.getcwd())
+
+from src.utils import working_directory_to_src
+working_directory_to_src()
+import numpy as np
 from tqdm import tqdm
 import warnings
-
-from eda_utils import get_data_paths, load_stock_csv
-
+from cookbooks.EDA.eda_utils import get_data_paths
+from src.utils import load_stock_csv
 warnings.filterwarnings('ignore')
-
 
 paths = get_data_paths()
 DATA_DIR = paths['stock_data_dir']
