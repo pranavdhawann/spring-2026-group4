@@ -33,7 +33,7 @@ class FinBERTModel(nn.Module):
             "window_size": 512,
             "stride": 256,
             "aggregation": "mean",  # mean | median
-            "device": "cuda",
+            "device": None,
             "local_files_only": False,
         }
 
