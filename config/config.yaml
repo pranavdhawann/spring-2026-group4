@@ -1,6 +1,8 @@
-# all the paths should be relative to src/
+# all the paths should be relative to project root
 DATA_FOLDER: 'data'
 NEWS_FOLDER: 'data/multi-modal-dataset/sp500_news'
 TIMES_SERIES_FOLDER: 'data/multi-modal-dataset/sp500_time_series'
 DATA_DICTIONARY: 'data/multi-modal-dataset/sp500stock_data_description.csv'
 STOCK_SCORE_NEWS: 'data/multi-modal-dataset/stock_scores_news_1.csv'
+STOCK_SCORE_TIMESERIES: 'data/multi-modal-dataset/all_stocks_ranked.csv'
+yoy_file: 'data/multi-modal-dataset/yoy_analysis_full.csv'
