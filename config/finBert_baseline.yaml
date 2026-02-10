@@ -1,0 +1,8 @@
+model_name_or_path: "ProsusAI/finbert"
+num_labels: 3
+max_tokens: 512
+window_size: 512
+stride: 256
+aggregation: "mean"  # mean | median
+device: "cuda"
+local_files_only: False

@@ -1,3 +1,4 @@
+# all the paths should be relative to project root
 DATA_FOLDER: 'data'
 NEWS_FOLDER: 'data/multi-modal-dataset/sp500_news'
 TIMES_SERIES_FOLDER: 'data/multi-modal-dataset/sp500_time_series'

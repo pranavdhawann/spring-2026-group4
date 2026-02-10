@@ -1,0 +1,54 @@
+graph TD
+        DS0["FinMultiTime"]
+
+    subgraph "1. Raw Data & Features"
+        DS1["Market Data<br/>(OHLCV + MSI Bands/RSI)"]
+        DS2["Financial News Text<br/>(Daily Headlines)"]
+        DS3["JSON Financial Reports<br/>(Fundamental Ratios)"]
+        DS4["Market Topology<br/>(S&P 500 Sector Edges)"]
+    end
+
+    subgraph "2. Encoders"
+        E1[iTransformer: Temporal Encoder]
+        E2[FinBERT: Textual Encoder]
+        E3[GRN: Tabular Encoder]
+    end
+
+    DS0 --> DS1
+    DS0 --> DS2
+    DS0 --> DS3
+    DS0 --> DS4
+
+    DS1 --> E1
+    DS2 --> E2
+    DS3 --> E3
+
+    subgraph "3. Temporal Alignment"
+        ALIGN[Feature Alignment Layer<br/>Projects to Common Dimension]
+    end
+
+    E1 --> ALIGN
+    E2 --> ALIGN
+    E3 --> ALIGN
+
+    subgraph "4. Relational Refiner"
+        GNN[Temporal GNN Block<br/>Message Passing on Graph]
+    end
+
+    ALIGN --> GNN
+    DS4 -- "Graph Structure" --> GNN
+
+    subgraph "5. Multimodal Fusion"
+        FUSION[Cross-Modal Attention<br/>Fuses Graph-Aware + Local Features]
+    end
+
+    GNN --> FUSION
+    ALIGN -.-> FUSION
+
+    subgraph "6. Forecasting Head"
+        REG[Probabilistic MLP<br/>Mean + Variance Output]
+        OUT[Return Forecast<br/>+ Uncertainty]
+    end
+
+    FUSION --> REG
+    REG --> OUT

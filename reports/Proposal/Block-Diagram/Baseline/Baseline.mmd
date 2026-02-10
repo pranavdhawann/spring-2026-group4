@@ -1,0 +1,52 @@
+%%{init: {
+  "flowchart": {
+    "nodeSpacing": 60,
+    "rankSpacing": 50,
+    "wrap": true
+  },
+  "themeVariables": {
+    "nodePadding": 16,
+    "lineHeight": 1.2,
+    "fontSize": "14px"
+  }
+}}%%
+
+
+flowchart TB
+    SRC["FinMultiTime"]
+
+ subgraph subGraph0["Phase 1: Data Preparation"]
+        D1["Time Series Data"]
+        D2["Financial News Text"]
+        D3["Financial Reports)"]
+ end
+
+ subgraph subGraph1["Phase 2: Training Encoders"]
+        E1["iTransformer<br/>(Temporal Embeds)"]
+        E2["FinBERT + Aggregator<br/>(Sentiment Embeds)"]
+        E3["Gated Residual Net<br/>(Fundamental Embeds)"]
+ end
+
+ subgraph subGraph2["Phase 3: Multimodal Fusion"]
+        FUSION["Cross-Modal Attention<br/>(Modality Alignment & Weighting)"]
+ end
+
+ subgraph subGraph3["Phase 4: Predictive Head"]
+        REG["Regression Head<br/>(Probabilistic MLP)"]
+        OUT["Continuous Forecast"]
+ end
+
+    SRC --> D1
+    SRC --> D2
+    SRC --> D3
+
+    D1 --> E1
+    D2 --> E2
+    D3 --> E3
+
+    E1 --> FUSION
+    E2 --> FUSION
+    E3 --> FUSION
+
+    FUSION --> REG
+    REG --> OUT
