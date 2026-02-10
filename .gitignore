@@ -61,7 +61,6 @@ interim_data/
 # ===============================
 # Model Artifacts
 # ===============================
-models/
 checkpoints/
 *.pt
 *.pth
@@ -129,3 +128,6 @@ docs/_build/
 # ===============================
 *.bak
 *.old
+src/models/train_lstm.py
+src/models/lstm_dataset.py
+src/models/README.md
