@@ -1,6 +1,8 @@
 import re
 import string
 from typing import List, Dict, Any
+from transformers import AutoTokenizer
+
 
 def tokenize_sentences(sentences, config):
     default_config = {
@@ -17,9 +19,7 @@ def tokenize_sentences(sentences, config):
     stop_words = {
         "en": {"a", "an", "the", "and", "or", "in", "on", "at", "to", "for", "with", "is", "are", "was", "were"}
     }.get(cfg["language"], set())
-
-    processed_results = []
-
+    processed_sentences = []
     for text in sentences:
         if cfg["strip_whitespace"]:
             text = text.strip()
@@ -30,25 +30,22 @@ def tokenize_sentences(sentences, config):
         tokens = text.split()
         if cfg["remove_stopwords"]:
             tokens = [word for word in tokens if word not in stop_words]
-        processed_results.append(tokens)
+        processed_sentences.append(" ".join(tokens))
 
-    return processed_results
-
+    return processed_sentences
 
 if __name__ == "__main__":
     sample_sentences = [
-        "FinBERT is a powerful model for financial sentiment analysis!",
-        "  Stock prices surged after the earnings report.  "
+        "This is an example sentance to see Tokenization process for FinBERT "
     ]
-    user_config = {
-        "lowercase": True,
-        "remove_punctuation": True,
-        "remove_stopwords": True
-    }
-    tokenized_output = tokenize_sentences(sample_sentences, user_config)
-    print(f"{'PREPROCESSING RESULTS':^50}")
-    print("=" * 50)
-    for sent, tok in zip(sample_sentences, tokenized_output):
-        print(f"Original: {sent.strip()}")
-        print(f"Tokens:   {tok}")
-        print("-" * 50)
+    cleaned_texts = tokenize_sentences(sample_sentences, {"remove_stopwords": True})
+    tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+    inputs = tokenizer(
+        cleaned_texts,
+        padding=True,
+        truncation=True,
+        return_tensors="pt"
+    )
+    print("="*50)
+    print(f"Cleaned Text 1: {cleaned_texts[0]}")
+    print(f"Token IDs:     {inputs['input_ids'][0][:10]}")
