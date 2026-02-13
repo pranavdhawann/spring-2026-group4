@@ -45,8 +45,14 @@ This repository contains the coursework, reports, and implementation for the Spr
 
 1. Download the dataset from Hugging Face:
    👉 [Multimodal Financial Time-Series Dataset](https://huggingface.co/datasets/Wenyan0110/Multimodal-Dataset-Image_Text_Table_TimeSeries-for-Financial-Time-Series-Forecasting)
+2. You can also download the dataset by running a script
+   ```bash
+   chmod +x setup_dataset.sh
+   ./setup_dataset
+   ```
+   this script will save the dataset in required format and skip the 3rd step
 
-2. Save the dataset under the `data/` directory at the project root, following this structure:
+3. Save the dataset under the `data/` directory at the project root, following this structure:
 
 ```text
 data/
@@ -57,13 +63,13 @@ data/
     └── stock_scores_news_1.csv         # Computed stock scores based on news data
 ```
 
-3. If your dataset is stored in a different location, update the paths in:
+4. If your dataset is stored in a different location, update the paths in:
 
    ```
    config/config.yaml
    ```
 
-4. From the project root directory, run the following command to generate the stock score file:
+5. From the project root directory, run the following command to generate the stock score file:
 
    ```bash
    python -m setupScripts.cal_data_quality_scores
