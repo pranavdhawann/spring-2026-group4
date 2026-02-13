@@ -53,6 +53,22 @@ def read_jsonl(path):
     return data
 
 
+def read_json_file(file_path):
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+
+    except FileNotFoundError:
+        print(f"Error: File not found -> {file_path}")
+
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON format in file -> {file_path}")
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
+
 def remove_outliers(data, factor=1.5):
     if not data:
         return []
@@ -71,20 +87,22 @@ def remove_outliers(data, factor=1.5):
     return filtered_data.tolist()
 
 
-def load_stock_csv(ticker: str, stock_data_dir: Path, start_year: Optional[int] = None) -> pd.DataFrame:
+def load_stock_csv(
+    ticker: str, stock_data_dir: Path, start_year: Optional[int] = None
+) -> pd.DataFrame:
     csv_file = stock_data_dir / f"{ticker.lower()}.csv"
-    
+
     if not csv_file.exists():
         raise FileNotFoundError(f"Stock data not found: {csv_file}")
-    
+
     df = pd.read_csv(csv_file)
-    df['Date'] = pd.to_datetime(df['Date'], utc=True, errors='coerce')
-    df['Date'] = df['Date'].dt.tz_localize(None)
-    df = df.dropna(subset=['Date']).sort_values('Date')
-    
+    df["Date"] = pd.to_datetime(df["Date"], utc=True, errors="coerce")
+    df["Date"] = df["Date"].dt.tz_localize(None)
+    df = df.dropna(subset=["Date"]).sort_values("Date")
+
     if start_year:
-        df = df[df['Date'].dt.year >= start_year]
-    
+        df = df[df["Date"].dt.year >= start_year]
+
     return df
 
 
@@ -92,15 +110,14 @@ def filter_timeseries_by_date(
     df: pd.DataFrame,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    date_col: str = 'Date'
+    date_col: str = "Date",
 ) -> pd.DataFrame:
-    
     df_filtered = df.copy()
-    
+
     if start_date:
         df_filtered = df_filtered[df_filtered[date_col] >= start_date]
-    
+
     if end_date:
         df_filtered = df_filtered[df_filtered[date_col] <= end_date]
-    
+
     return df_filtered
