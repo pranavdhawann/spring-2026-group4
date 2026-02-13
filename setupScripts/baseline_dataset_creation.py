@@ -1,18 +1,16 @@
 import os
+import sys
 import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import yaml
 import warnings
 warnings.filterwarnings('ignore')
 
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+from src.utils.utils import read_yaml
 
-def load_config(config_path):
-    """Load configuration from YAML file"""
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    return config
 
 
 def load_financial_jsonl(filepath):
@@ -182,7 +180,7 @@ def load_and_process_news(news_file, ticker):
     news_df = pd.DataFrame(articles)
     print(f"  Loaded {len(news_df)} articles")
     
-    news_df['Date'] = pd.to_datetime(news_df['Date'], errors='coerce')
+    news_df['Date'] = pd.to_datetime(news_df['Date'], errors='coerce', utc=True).dt.tz_localize(None)
     if news_df['Date'].dt.tz is not None:
         news_df['Date'] = news_df['Date'].dt.tz_localize(None)
     
@@ -329,7 +327,11 @@ def process_ticker(ticker, config, project_root, sector_map):
         print(f"  Financial directory not found: {ticker_dir}")
         return None
     
-    ts_files = list(TIME_SERIES.glob(f"*{ticker}*.csv"))
+    ts_files = list(TIME_SERIES.glob(f"{ticker}.csv"))
+    if not ts_files:
+        ts_files = list(TIME_SERIES.glob(f"{ticker.upper()}.csv"))
+    if not ts_files:
+        ts_files = list(TIME_SERIES.glob(f"*{ticker}*.csv"))
     if not ts_files:
         ts_files = list(TIME_SERIES.glob(f"*{ticker.upper()}*.csv"))
     
@@ -345,7 +347,7 @@ def process_ticker(ticker, config, project_root, sector_map):
     for col in ts_data.columns:
         if 'date' in col.lower():
             date_col = col
-            ts_data[col] = pd.to_datetime(ts_data[col])
+            ts_data[col] = pd.to_datetime(ts_data[col], utc=True).dt.tz_localize(None).dt.normalize()
             break
     
     if not date_col:
@@ -358,7 +360,11 @@ def process_ticker(ticker, config, project_root, sector_map):
     print("Merging daily with financials...")
     merged_data = merge_daily_with_financials(ts_data, date_col, features_df, ticker)
     
-    news_files = list(NEWS_DIR.glob(f"*{ticker.upper()}*.jsonl"))
+    news_files = list(NEWS_DIR.glob(f"{ticker.upper()}.jsonl"))
+    if not news_files:
+        news_files = list(NEWS_DIR.glob(f"{ticker}.jsonl"))
+    if not news_files:
+        news_files = list(NEWS_DIR.glob(f"*{ticker.upper()}*.jsonl"))
     
     if news_files:
         news_file = news_files[0]
@@ -405,7 +411,7 @@ def main():
     config_path = project_root / "config" / "config.yaml"
     
     print(f"Loading config from: {config_path}")
-    config = load_config(config_path)
+    config = read_yaml(config_path)
     
     GRAPH_DATA = project_root / config['DATA_DICTIONARY']
     sector_df = pd.read_csv(GRAPH_DATA)
