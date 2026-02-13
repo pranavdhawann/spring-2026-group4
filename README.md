@@ -45,12 +45,35 @@ This repository contains the coursework, reports, and implementation for the Spr
 
 1. Download the dataset from Hugging Face:
    👉 [Multimodal Financial Time-Series Dataset](https://huggingface.co/datasets/Wenyan0110/Multimodal-Dataset-Image_Text_Table_TimeSeries-for-Financial-Time-Series-Forecasting)
-2. You can also download the dataset by running a script
-   ```bash
-   chmod +x setup_dataset.sh
-   ./setup_dataset
-   ```
-   this script will save the dataset in required format and skip the 3rd step
+Here’s a polished version of your instructions with corrected grammar, formatting, and clarity:
+
+---
+
+2. Download the Dataset and Setup Environment
+
+You can download the dataset by running the following script:
+
+```bash
+chmod +x setup_dataset.sh
+./setup_dataset.sh
+```
+
+This script will save the dataset in the required format and **skip step 3**.
+
+**Note for Ubuntu users:**
+You can run the following commands to download the dataset, set up the virtual environment, and install all required Python packages:
+
+```bash
+chmod +x setup_dataset.sh
+chmod +x setup_ubuntu.sh
+./setup_ubuntu.sh
+```
+
+This will automatically:
+
+* Download the dataset
+* Set up the Python virtual environment
+* Install all necessary Python packages
 
 3. Save the dataset under the `data/` directory at the project root, following this structure:
 
