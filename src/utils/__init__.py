@@ -6,7 +6,8 @@ from .utils import (
     read_yaml,
     remove_outliers,
     working_directory_to_src,
-)
+from .metrics_utils import calculate_regression_metrics
+
 
 __all__ = [
     "read_jsonl",
@@ -16,4 +17,5 @@ __all__ = [
     "load_stock_csv",
     "filter_timeseries_by_date",
     "read_json_file",
+    "calculate_regression_metrics",
 ]
