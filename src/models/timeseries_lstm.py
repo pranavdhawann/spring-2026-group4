@@ -1,13 +1,18 @@
-"""Generic PyTorch LSTM model for time series forecasting."""
+"""Enhanced PyTorch LSTM model for time series forecasting."""
 import torch
 import torch.nn as nn
 
 
 class TimeSeriesModel(nn.Module):
     """
-    Configurable LSTM-based model for time series prediction.
-    All architecture parameters are passed via a config dictionary.
-
+    Enhanced LSTM-based model for time series prediction.
+    
+    Improvements:
+    - Optional attention mechanism
+    - Layer normalization
+    - Residual connections (optional)
+    - Better initialization
+    
     Args:
         - input_size (int): Number of input features per timestep. Default: 5
         - hidden_size (int): LSTM hidden dimension. Default: 64
@@ -15,6 +20,8 @@ class TimeSeriesModel(nn.Module):
         - dropout (float): Dropout between LSTM layers. Default: 0.1
         - output_size (int): Number of output predictions. Default: 1
         - bidirectional (bool): Use bidirectional LSTM. Default: False
+        - use_attention (bool): Add attention mechanism. Default: False
+        - use_layer_norm (bool): Add layer normalization. Default: True
     """
 
     DEFAULTS = {
@@ -24,6 +31,8 @@ class TimeSeriesModel(nn.Module):
         "dropout": 0.1,
         "output_size": 1,
         "bidirectional": False,
+        "use_attention": False,
+        "use_layer_norm": True,
     }
 
     def __init__(self, config: dict):
@@ -37,11 +46,17 @@ class TimeSeriesModel(nn.Module):
         self.dropout = self.config["dropout"]
         self.output_size = self.config["output_size"]
         self.bidirectional = self.config["bidirectional"]
+        self.use_attention = self.config["use_attention"]
+        self.use_layer_norm = self.config["use_layer_norm"]
         self.num_directions = 2 if self.bidirectional else 1
 
-        # LSTM encoder
+        self.input_proj = nn.Linear(self.input_size, self.hidden_size)
+        
+        if self.use_layer_norm:
+            self.input_norm = nn.LayerNorm(self.hidden_size)
+
         self.lstm = nn.LSTM(
-            input_size=self.input_size,
+            input_size=self.hidden_size, 
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
             dropout=self.dropout if self.num_layers > 1 else 0.0,
@@ -49,9 +64,34 @@ class TimeSeriesModel(nn.Module):
             bidirectional=self.bidirectional,
         )
 
-        # Output projection
+        if self.use_attention:
+            attn_input_size = self.hidden_size * self.num_directions
+            self.attention = nn.Sequential(
+                nn.Linear(attn_input_size, attn_input_size // 2),
+                nn.Tanh(),
+                nn.Linear(attn_input_size // 2, 1)
+            )
+
         fc_input_size = self.hidden_size * self.num_directions
-        self.fc = nn.Linear(fc_input_size, self.output_size)
+        self.fc = nn.Sequential(
+            nn.Linear(fc_input_size, fc_input_size // 2),
+            nn.ReLU(),
+            nn.Dropout(self.dropout),
+            nn.Linear(fc_input_size // 2, self.output_size)
+        )
+
+        self._init_weights()
+
+    def _init_weights(self):
+        """Better weight initialization."""
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if 'lstm' in name:
+                    nn.init.orthogonal_(param)
+                else:
+                    nn.init.xavier_uniform_(param)
+            elif 'bias' in name:
+                nn.init.zeros_(param)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -63,59 +103,89 @@ class TimeSeriesModel(nn.Module):
         Returns:
             Output tensor of shape (batch_size, output_size)
         """
+        batch_size, seq_len, _ = x.shape
+
+        x = self.input_proj(x)
+        
+        if self.use_layer_norm:
+            x = self.input_norm(x)
+
+        # LSTM encoding
+        lstm_out, (h_n, _) = self.lstm(x)
+
+        if self.use_attention:
+            attn_weights = self.attention(lstm_out) 
+            attn_weights = torch.softmax(attn_weights, dim=1)
+            context = (lstm_out * attn_weights).sum(dim=1)  
+        else:
+            if self.bidirectional:
+                h_forward = h_n[-2]  
+                h_backward = h_n[-1]  
+                context = torch.cat([h_forward, h_backward], dim=1)
+            else:
+                context = h_n[-1]
+
+        out = self.fc(context)
+        return out
+
+
+class SimpleLSTM(nn.Module):
+    """
+    Simplified LSTM baseline - same as original for comparison.
+    """
+    
+    def __init__(self, config: dict):
+        super().__init__()
+        
+        self.config = config
+        self.input_size = config.get("input_size", 5)
+        self.hidden_size = config.get("hidden_size", 64)
+        self.num_layers = config.get("num_layers", 2)
+        self.dropout = config.get("dropout", 0.1)
+        self.bidirectional = config.get("bidirectional", False)
+        self.num_directions = 2 if self.bidirectional else 1
+
+        self.lstm = nn.LSTM(
+            input_size=self.input_size,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_layers,
+            dropout=self.dropout if self.num_layers > 1 else 0.0,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+        )
+
+        fc_input_size = self.hidden_size * self.num_directions
+        self.fc = nn.Linear(fc_input_size, 1)
+
+    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         lstm_out, (h_n, _) = self.lstm(x)
 
         if self.bidirectional:
-            h_forward = h_n[-2]  
-            h_backward = h_n[-1]  
-            hidden = torch.cat([h_forward, h_backward], dim=1)
+            hidden = torch.cat([h_n[-2], h_n[-1]], dim=1)
         else:
-            hidden = h_n[-1] 
+            hidden = h_n[-1]
 
-        out = self.fc(hidden)
-        return out
+        return self.fc(hidden)
 
 
 if __name__ == "__main__":
     config = {
-        "input_size": 16,
-        "hidden_size": 64,
-        "num_layers": 2,
-        "output_size": 1,
+        "input_size": 14,
+        "hidden_size": 128,
+        "num_layers": 3,
+        "use_attention": True,
     }
 
     model = TimeSeriesModel(config)
-    x = torch.randn(8, 20, 16) 
+    x = torch.randn(32, 20, 14)
     y = model(x)
 
-    print(f"Config: {model.config}")
-    print(f"Input shape:  {x.shape}")
-    print(f"Output shape: {y.shape}")
-    print(f"Parameters:   {sum(p.numel() for p in model.parameters()):,}")
-
-    config_bidir = {
-        "input_size": 5,
-        "hidden_size": 32,
-        "num_layers": 3,
-        "dropout": 0.2,
-        "output_size": 1,
-        "bidirectional": True,
-    }
-
-    model_bidir = TimeSeriesModel(config_bidir)
-    x_ohlcv = torch.randn(4, 30, 5)  
-    y_bidir = model_bidir(x_ohlcv)
-
-    print(f"\nBidirectional model:")
-    print(f"Input shape:  {x_ohlcv.shape}")
-    print(f"Output shape: {y_bidir.shape}")
-    print(f"Parameters:   {sum(p.numel() for p in model_bidir.parameters()):,}")
-
-    minimal_config = {"input_size": 10}
-    model_minimal = TimeSeriesModel(minimal_config)
-    x_min = torch.randn(2, 15, 10)
-    y_min = model_minimal(x_min)
-
-    print(f"\nMinimal config (defaults applied):")
-    print(f"Config: {model_minimal.config}")
-    print(f"Output shape: {y_min.shape}")
+    print(f"Enhanced Model:")
+    print(f"  Input shape:  {x.shape}")
+    print(f"  Output shape: {y.shape}")
+    print(f"  Parameters:   {sum(p.numel() for p in model.parameters()):,}")
+    
+    simple = SimpleLSTM(config)
+    y_simple = simple(x)
+    print(f"\nSimple Model:")
+    print(f"  Parameters:   {sum(p.numel() for p in simple.parameters()):,}")

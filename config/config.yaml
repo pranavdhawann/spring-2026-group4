@@ -8,3 +8,10 @@ TABULAR_DATA: 'data/multi-modal-dataset/sp500_table'
 STOCK_SCORE_TIMESERIES: 'data/multi-modal-dataset/all_stocks_ranked.csv'
 yoy_file: 'data/multi-modal-dataset/yoy_analysis_full.csv'
 VOCAB_FILE: 'data/multi-modal-dataset/vocab.txt'
+
+BASELINE_DATA_PATH: 'data/baseline_data'
+
+HISTORY_WINDOW_SIZE: 14    # T - how many days of history
+FORECAST_HORIZON: 7         # M - how many days to predict
+STRIDE: 7                   # window step size
+N_STOCKS: 100
