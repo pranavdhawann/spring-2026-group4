@@ -412,7 +412,6 @@ def process_ticker(ticker, config, project_root, sector_map, scores_df):
     ts_data = ts_data[
         (ts_data[date_col] >= START_DATE) & (ts_data[date_col] <= END_DATE)
     ]
-    print(ts_data)
     print(f"  Loaded {len(ts_data)} records")
 
     print("Merging daily with financials...")
@@ -488,7 +487,9 @@ def main():
         ticker2id[ticker] = id_
         id_ += 1
     # save tickers list
-    with open(os.path.join(config["BASELINE_DATA_PATH"], "tickers2id.json"), "w") as f:
+    with open(
+        os.path.join(config["BASELINE_DATA_PATH"], config["TICKER2IDX"]), "w"
+    ) as f:
         json.dump(ticker2id, f, indent=4)
     print(
         f"Ticker to Id map saved at {os.path.join(config['BASELINE_DATA_PATH'],'tickers2id.json')}"

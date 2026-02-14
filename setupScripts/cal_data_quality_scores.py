@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from src.utils import read_jsonl, read_yaml
 
-W_MIN = 360 * 5  # minimum trainable window (days)
+W_MIN = 360 * 10  # minimum trainable window (days)
 C_MIN = 0.25  # min coverage inside window
 G_MAX = 14  # max allowed p90 gap (days)
 
