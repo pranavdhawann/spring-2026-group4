@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -332,8 +333,13 @@ def create_windowed_samples(
     return samples
 
 
-def process_ticker(ticker, config, project_root, sector_map):
+def process_ticker(ticker, config, project_root, sector_map, scores_df):
     """Process a single ticker"""
+    ticker = ticker.lower()
+    START_DATE = scores_df[scores_df["ticker"] == ticker.upper()][
+        "window_start"
+    ].values[0]
+    END_DATE = scores_df[scores_df["ticker"] == ticker.upper()]["window_end"].values[0]
     print(f"\n{'=' * 70}")
     print(f"Processing: {ticker.upper()}")
     print(f"{'=' * 70}")
@@ -341,8 +347,7 @@ def process_ticker(ticker, config, project_root, sector_map):
     FINANCIAL_REPORTS = project_root / config["TABULAR_DATA"]
     TIME_SERIES = project_root / config["TIMES_SERIES_FOLDER"]
     NEWS_DIR = project_root / config["NEWS_FOLDER"]
-    OUTPUT_PATH = project_root / config["OUTPUT_PATH_DATA"]
-
+    OUTPUT_PATH = project_root / config["BASELINE_DATA_PATH"]
     ticker_dir = FINANCIAL_REPORTS / ticker
     financial_data = {}
 
@@ -404,6 +409,10 @@ def process_ticker(ticker, config, project_root, sector_map):
         return None
 
     ts_data = ts_data.sort_values(date_col)
+    ts_data = ts_data[
+        (ts_data[date_col] >= START_DATE) & (ts_data[date_col] <= END_DATE)
+    ]
+    print(ts_data)
     print(f"  Loaded {len(ts_data)} records")
 
     print("Merging daily with financials...")
@@ -466,8 +475,24 @@ def main():
     sector_df = pd.read_csv(GRAPH_DATA)
     sector_map = dict(zip(sector_df["stock_name"], sector_df["Sector"]))
 
-    tickers = config.get("TICKERS", [])
+    scores_df = pd.read_csv(config["STOCK_SCORE_NEWS"])
+    scores_df = scores_df[["ticker", "window_start", "window_end"]]
 
+    tickers = scores_df["ticker"].unique().tolist()
+    print(f"Choosing {config['N_STOCKS']} for dataset..")
+    tickers = tickers[: min(len(tickers), config["N_STOCKS"])]
+
+    ticker2id = {}
+    id_ = 0
+    for ticker in tickers:
+        ticker2id[ticker] = id_
+        id_ += 1
+    # save tickers list
+    with open(os.path.join(config["BASELINE_DATA_PATH"], "tickers2id.json"), "w") as f:
+        json.dump(ticker2id, f, indent=4)
+    print(
+        f"Ticker to Id map saved at {os.path.join(config['BASELINE_DATA_PATH'],'tickers2id.json')}"
+    )
     if not tickers:
         print("ERROR: No tickers found in config.yaml")
         print("Please add TICKERS list to config.yaml")
@@ -478,7 +503,9 @@ def main():
     results = {}
     for ticker in tickers:
         try:
-            samples_count = process_ticker(ticker, config, project_root, sector_map)
+            samples_count = process_ticker(
+                ticker, config, project_root, sector_map, scores_df
+            )
             results[ticker] = samples_count
         except Exception as e:
             print(f"Error processing {ticker}: {e}")
