@@ -1,11 +1,26 @@
 import json
 import os
+import random
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import pandas as pd
+import torch
 import yaml
+
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
+
+    print(f"Random seed set to {seed}")
 
 
 def read_yaml(path):
