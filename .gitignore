@@ -128,7 +128,4 @@ docs/_build/
 # ===============================
 *.bak
 *.old
-src/models/train_lstm.py
-src/models/lstm_dataset.py
-src/models/README.md
 experiments/*
