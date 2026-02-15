@@ -1,4 +1,5 @@
 import string
+import time
 
 from transformers import AutoTokenizer
 
@@ -39,7 +40,8 @@ def clean_sentences(sentences, cfg):
     return processed_sentences
 
 
-def tokenize_sentences(sentences, config):
+def tokenize_sentences(sentences, tokenizer, config, verbose=False):
+    st_ = time.time()
     default_config = {
         "lowercase": True,
         "remove_punctuation": True,
@@ -50,19 +52,22 @@ def tokenize_sentences(sentences, config):
         "padding": "max_length",
         "truncation": True,
         "max_length": 512,
+        "local_files_only": True,
     }
     if config:
         default_config.update(config)
     cfg = default_config
-    cleaned_texts = clean_sentences(sample_sentences, cfg)
-    tokenizer = AutoTokenizer.from_pretrained(cfg["tokenizer_path"])
+    cleaned_texts = clean_sentences(sentences, cfg)
     inputs = tokenizer(
         cleaned_texts,
         padding=cfg["padding"],
         truncation=cfg["truncation"],
         max_length=cfg["max_length"],
         return_tensors="pt",
+        local_files_only=cfg["local_files_only"],
     )
+    if verbose:
+        ("Time to process Tokenizer: ", time.time() - st_)
     return cleaned_texts, inputs
 
 
@@ -92,7 +97,11 @@ if __name__ == "__main__":
     ]
 
     cleaned_texts, inputs = tokenize_sentences(
-        sample_sentences, {"remove_stopwords": True, "max_length": 6}
+        sample_sentences,
+        tokenizer=AutoTokenizer.from_pretrained(
+            "ProsusAI/finbert", local_files_only=True
+        ),
+        config={"remove_stopwords": True, "max_length": 6},
     )
     print("=" * 50)
     for idx in range(len(cleaned_texts)):
