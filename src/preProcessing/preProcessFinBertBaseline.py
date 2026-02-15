@@ -46,8 +46,8 @@ def _standardize_list(lst, mean=None, std=None):
 def preProcessFinBertBaseline(batch, prProcessCfg):
     cfg = {}
     cfg.update(prProcessCfg)
-    processed_batch = []
-
+    X = []
+    y = []
     input_size = max(0, len(batch[0]["dates"]))
     for b in batch:
         news_ = []
@@ -74,6 +74,7 @@ def preProcessFinBertBaseline(batch, prProcessCfg):
         targets_ = b["target"]
         targets_ = _replace_none_with_avg(targets_)
         _, _, targets_ = _standardize_list(targets_, mean, std)
-        processed_batch.append((news_, closes_, mean, std, targets_))
+        X.append([news_, closes_, mean, std])
+        y.append(targets_)
 
-    return processed_batch
+    return X, y
