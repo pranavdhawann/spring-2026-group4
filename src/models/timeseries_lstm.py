@@ -172,6 +172,7 @@ class LSTMForecaster(nn.Module):
     """
     Config-driven LSTM for multi-step time-series forecasting.
 
+    Extends the project's LSTM models with a configurable fully connected head
     built dynamically from the ``fc_hidden_sizes`` list.  This allows
     experimenting with different FC depths without changing code.
 
