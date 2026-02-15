@@ -54,7 +54,7 @@ def tokenize_sentences(sentences, config):
     if config:
         default_config.update(config)
     cfg = default_config
-    cleaned_texts = clean_sentences(sample_sentences, cfg)
+    cleaned_texts = clean_sentences(sentences, cfg)
     tokenizer = AutoTokenizer.from_pretrained(cfg["tokenizer_path"])
     inputs = tokenizer(
         cleaned_texts,
