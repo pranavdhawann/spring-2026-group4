@@ -63,11 +63,29 @@ def _remove_data_with_no_news(data):
 
 
 def _test_train_split(data, config):
-    random.shuffle(data)
-    split_idx = int(len(data) * (1 - config["test_train_split"]))
-    train_data = data[:split_idx]
-    test_data = data[split_idx:]
+    """
+    - Removed Random Shuffle     
+   - This function splits data chronologically to prevent temporal leakage.
+     Earlier samples go to training, later samples go to testing.
+    """
+    ticker_groups = {}
+    for item in data:
+        jsonl_path, line_idx, ticker_text, ticker_id = item
+        if ticker_text not in ticker_groups:
+            ticker_groups[ticker_text] = []
+        ticker_groups[ticker_text].append(item)
+    
+    train_data = []
+    test_data = []
 
+    for ticker, ticker_data in ticker_groups.items():
+        ticker_data_sorted = sorted(ticker_data, key=lambda x: (x[0], x[1]))
+        
+        split_idx = int(len(ticker_data_sorted) * (1 - config["test_train_split"]))
+        
+        train_data.extend(ticker_data_sorted[:split_idx])
+        test_data.extend(ticker_data_sorted[split_idx:])
+        
     return train_data, test_data
 
 
