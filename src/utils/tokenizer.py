@@ -1,4 +1,5 @@
 import string
+import time
 
 from transformers import AutoTokenizer
 
@@ -39,9 +40,7 @@ def clean_sentences(sentences, cfg):
     return processed_sentences
 
 
-def tokenize_sentences(sentences, tokenizer, config):
-    import time
-
+def tokenize_sentences(sentences, tokenizer, config, verbose=False):
     st_ = time.time()
     default_config = {
         "lowercase": True,
@@ -59,7 +58,6 @@ def tokenize_sentences(sentences, tokenizer, config):
         default_config.update(config)
     cfg = default_config
     cleaned_texts = clean_sentences(sentences, cfg)
-    # tokenizer = AutoTokenizer.from_pretrained(cfg["tokenizer_path"], local_files_only=cfg["local_files_only"])
     inputs = tokenizer(
         cleaned_texts,
         padding=cfg["padding"],
@@ -68,7 +66,8 @@ def tokenize_sentences(sentences, tokenizer, config):
         return_tensors="pt",
         local_files_only=cfg["local_files_only"],
     )
-    print("Time to process Tokenizer: ", time.time() - st_)
+    if verbose:
+        ("Time to process Tokenizer: ", time.time() - st_)
     return cleaned_texts, inputs
 
 
