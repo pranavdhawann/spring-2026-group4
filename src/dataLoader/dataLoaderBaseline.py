@@ -1,3 +1,4 @@
+import json
 import os
 import random
 
@@ -26,8 +27,17 @@ class BaselineDataLoader(Dataset):
         return len(self.config["data"])
 
     def __getitem__(self, idx):
-        data = self.config["data"][idx]
-        return data
+        jsonl_path, line_idx, ticker_text, ticker_id = self.config["data"][idx]
+
+        with open(jsonl_path, "r") as f:
+            for i, line in enumerate(f):
+                if i == line_idx:
+                    out = json.loads(line)
+                    break
+
+        out["ticker_text"] = ticker_text
+        out["ticker_id"] = ticker_id
+        return out
 
 
 def _add_ticker_feature(data, ticker_text, ticker_id):
@@ -69,9 +79,9 @@ def _load_valid_data_points(config):
         if not os.path.exists(jsonl_path):
             continue
         data_ = read_jsonl(jsonl_path)
-        data_ = _add_ticker_feature(data_, ticker, idx)
-        data_ = _remove_data_with_no_news(data_)
-        data = data + data_
+        for element in range(len(data_)):
+            data.append((jsonl_path, element, ticker, idx))
+
     print(f" Total Data Points : {len(data)}")
     train_set, test_set = _test_train_split(data, config)
     print(f"    Train split : {len(train_set)}")
@@ -117,3 +127,6 @@ if __name__ == "__main__":
         "random_seed": 42,
     }
     train_dataloader, test_dataloader = getTrainTestDataLoader(data_config)
+    n = train_dataloader.__len__()
+    for idx in tqdm(range(n)):
+        train_dataloader.__getitem__(idx)
