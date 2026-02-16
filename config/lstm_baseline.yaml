@@ -8,7 +8,7 @@ num_layers: 2                     # Number of stacked LSTM layers
 dropout: 0.2                      # Dropout rate
 output_size: 7                    # Forecast horizon (days to predict)
 bidirectional: false              # Use bidirectional LSTM
-use_attention: true               # Add attention mechanism
+use_attention: false              # Add attention mechanism
 use_layer_norm: true              # Add layer normalization
 fc_hidden_sizes: [64, 32]         # Fully connected head layer sizes
 

@@ -18,6 +18,7 @@ Usage:
 """
 
 import pickle
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -72,12 +73,17 @@ def extract_ohlcv_features(time_series: List[dict]) -> np.ndarray:
     return arr
 
 
-def compute_technical_indicators(ohlcv: np.ndarray) -> np.ndarray:
+def compute_technical_indicators(
+    ohlcv: np.ndarray,
+    precomputed_rsi: Optional[np.ndarray] = None,
+) -> np.ndarray:
     """
     Compute technical indicators from OHLCV data.
 
     Args:
         ohlcv: shape (seq_len, 5) -- columns [open, high, low, close, volume]
+        precomputed_rsi: optional precomputed RSI array of shape (seq_len,).
+            When provided, skips the per-sample RSI calculation.
 
     Returns:
         np.ndarray of shape (seq_len, 7) with columns:
@@ -107,8 +113,11 @@ def compute_technical_indicators(ohlcv: np.ndarray) -> np.ndarray:
     # 4. SMA 5
     sma_5 = _rolling_mean(close, window=5)
 
-    # 5. RSI 14 (adaptive for short windows)
-    rsi_14 = _compute_rsi(close, period=min(14, seq_len))
+    # 5. RSI 14 -- use precomputed if available
+    if precomputed_rsi is not None:
+        rsi_14 = precomputed_rsi
+    else:
+        rsi_14 = _compute_rsi(close, period=min(14, seq_len))
 
     # 6. MACD (12-EMA minus 26-EMA, approximated for short sequences)
     ema_12 = _ema(close, span=min(12, seq_len))
@@ -220,6 +229,7 @@ def _compute_rsi(close: np.ndarray, period: int) -> np.ndarray:
 def build_feature_matrix(
     sample: dict,
     feature_groups: List[str] = None,
+    precomputed_rsi: Optional[np.ndarray] = None,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[List[str]]]:
     """
     Build a complete feature matrix from a single dataloader sample.
@@ -228,6 +238,7 @@ def build_feature_matrix(
         sample: dict with keys: dates, time_series, target, ticker_text, ticker_id
         feature_groups: Which feature groups to include.
             Default: ["ohlcv", "technical", "temporal"]
+        precomputed_rsi: optional precomputed RSI array for this sample's window.
 
     Returns:
         features: np.ndarray of shape (seq_len, num_features) or None if invalid
@@ -258,7 +269,7 @@ def build_feature_matrix(
         parts.append(ohlcv)
 
     if "technical" in feature_groups:
-        tech = compute_technical_indicators(ohlcv)
+        tech = compute_technical_indicators(ohlcv, precomputed_rsi=precomputed_rsi)
         parts.append(tech)
 
     if "temporal" in feature_groups and dates:
@@ -324,16 +335,125 @@ class LSTMTimeSeriesDataset(Dataset):
 # Data processing helpers
 # ---------------------------------------------------------------------------
 
+def _precompute_rsi_for_tickers(
+    dataloader: Dataset,
+    max_workers: Optional[int] = None,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compute RSI once per ticker over its full close-price history.
+
+    Groups all samples by ticker, extracts the close prices, builds a
+    single contiguous close series (sorted by first date in each sample),
+    and computes RSI over the full series.  Returns a dict mapping
+    ticker_text -> full RSI array.
+
+    The per-sample RSI slices are later looked up by matching dates.
+    """
+    from collections import defaultdict
+
+    ticker_closes: Dict[str, List[Tuple[str, np.ndarray, List[str]]]] = defaultdict(list)
+
+    n = len(dataloader)
+
+    # Parallelize sample loading for RSI precomputation
+    def load_sample_for_rsi(idx):
+        sample = dataloader[idx]
+        ticker = sample.get("ticker_text", "")
+        ts = sample.get("time_series")
+        dates = sample.get("dates")
+        if not ts or not dates:
+            return None
+        close = np.array(
+            [t.get("close", 0.0) or 0.0 for t in ts], dtype=np.float64
+        )
+        return (ticker, dates[0], close, dates)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(load_sample_for_rsi, idx) for idx in range(n)]
+        for future in tqdm(as_completed(futures), total=n, desc="  Loading for RSI"):
+            result = future.result()
+            if result:
+                ticker, first_date, close, dates = result
+                ticker_closes[ticker].append((first_date, close, dates))
+
+    ticker_rsi: Dict[str, Dict[str, float]] = {}
+    for ticker, entries in ticker_closes.items():
+        # Sort windows by first date to get temporal order
+        entries.sort(key=lambda x: x[0])
+
+        # Build a date -> index mapping from all unique dates
+        date_to_close: Dict[str, float] = {}
+        for _, close_arr, dates_list in entries:
+            for d, c in zip(dates_list, close_arr):
+                if d not in date_to_close:
+                    date_to_close[d] = c
+
+        # Sort dates and build full close series
+        sorted_dates = sorted(date_to_close.keys())
+        full_close = np.array([date_to_close[d] for d in sorted_dates], dtype=np.float64)
+
+        # Compute RSI once over full series
+        full_rsi = _compute_rsi(full_close, period=min(14, len(full_close)))
+
+        # Build a date -> RSI value lookup
+        date_to_rsi = {d: full_rsi[i] for i, d in enumerate(sorted_dates)}
+        ticker_rsi[ticker] = date_to_rsi
+
+    return ticker_rsi
+
+
+def _load_and_process_sample(args):
+    """Worker function for parallel sample loading and processing."""
+    dataloader, idx, feature_groups, ticker_rsi = args
+
+    # Load sample from disk (I/O operation)
+    sample = dataloader[idx]
+
+    # Extract precomputed RSI for this sample
+    precomputed_rsi = None
+    ticker = sample.get("ticker_text", "")
+    if ticker in ticker_rsi:
+        dates = sample.get("dates")
+        if dates:
+            rsi_values = ticker_rsi[ticker]
+            precomputed_rsi = np.array(
+                [rsi_values.get(d, 50.0) for d in dates], dtype=np.float64
+            )
+
+    # Compute features
+    feat, tgt, dates = build_feature_matrix(
+        sample, feature_groups, precomputed_rsi=precomputed_rsi
+    )
+    if feat is None:
+        return None
+
+    return {
+        "features": feat,
+        "target": tgt,
+        "ticker_id": sample.get("ticker_id", 0),
+        "metadata": {
+            "ticker_text": sample.get("ticker_text", ""),
+            "dates": dates,
+            "first_date": dates[0] if dates else "",
+        },
+    }
+
+
 def process_dataloader(
     dataloader: Dataset,
     feature_groups: List[str],
+    max_workers: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[dict]]:
     """
     Iterate through a BaselineDataLoader and build feature matrices.
 
+    Uses ThreadPoolExecutor to parallelize I/O and feature computation,
+    and precomputes RSI once per ticker to avoid redundant work.
+
     Args:
         dataloader: A BaselineDataLoader instance.
         feature_groups: Which feature groups to include.
+        max_workers: Number of parallel workers (default: CPU count * 2 for I/O).
 
     Returns:
         features: np.ndarray of shape (N, seq_len, num_features)
@@ -341,27 +461,53 @@ def process_dataloader(
         ticker_ids: np.ndarray of shape (N,)
         metadata: list of dicts with ticker_text, dates, first_date
     """
+    n = len(dataloader)
+
+    # --- Step 1: Precompute RSI per ticker (parallelized) ---
+    compute_rsi = "technical" in feature_groups
+    ticker_rsi = {}
+    if compute_rsi:
+        print("  Precomputing RSI per ticker...")
+        ticker_rsi = _precompute_rsi_for_tickers(dataloader, max_workers=max_workers)
+
+    # --- Step 2: Parallel I/O + feature computation ---
+    # Use ThreadPoolExecutor since I/O is the bottleneck (reading JSONL files)
+    # For I/O-bound tasks, threads are more efficient than processes
+    print(f"  Loading and processing samples in parallel (workers={max_workers or 'auto'})...")
+
+    # Prepare arguments for each sample
+    args_list = [
+        (dataloader, idx, feature_groups, ticker_rsi)
+        for idx in range(n)
+    ]
+
     all_features = []
     all_targets = []
     all_ticker_ids = []
     all_metadata = []
 
-    n = len(dataloader)
-    for idx in tqdm(range(n), desc="Processing samples"):
-        sample = dataloader[idx]
+    # Use ThreadPoolExecutor for I/O-bound operations
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_load_and_process_sample, args): i
+            for i, args in enumerate(args_list)
+        }
+        results = [None] * len(args_list)
+        for future in tqdm(as_completed(futures), total=len(futures), desc="  Processing"):
+            idx = futures[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                print(f"Error processing sample {idx}: {e}")
+                results[idx] = None
 
-        feat, tgt, dates = build_feature_matrix(sample, feature_groups)
-        if feat is None:
+    for result in results:
+        if result is None:
             continue
-
-        all_features.append(feat)
-        all_targets.append(tgt)
-        all_ticker_ids.append(sample.get("ticker_id", 0))
-        all_metadata.append({
-            "ticker_text": sample.get("ticker_text", ""),
-            "dates": dates,
-            "first_date": dates[0] if dates else "",
-        })
+        all_features.append(result["features"])
+        all_targets.append(result["target"])
+        all_ticker_ids.append(result["ticker_id"])
+        all_metadata.append(result["metadata"])
 
     features = np.array(all_features, dtype=np.float64)
     targets = np.array(all_targets, dtype=np.float64)
