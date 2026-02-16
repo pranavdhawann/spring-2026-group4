@@ -1,14 +1,3 @@
-"""
-src/models/finbert.py
-
-Configurable FinBERT model wrapper for sentiment inference and training.
-Supports:
-- Hugging Face or local model loading
-- Tokenized tensor inputs
-- Sliding window inference for long sequences
-- Configurable aggregation strategies
-"""
-
 from typing import Dict
 
 import torch
@@ -20,81 +9,116 @@ from src.utils import set_seed
 
 class FinBertForecastingBL(nn.Module):
     """
-    FinBERT encoder + LSTM decoder for time-series forecasting
+    FinBERT + Encoder LSTM (time) + Feature-conditioned Decoder LSTM
     """
 
     def __init__(self, config: Dict):
-        set_seed()
         super(FinBertForecastingBL, self).__init__()
+        set_seed()
 
-        # Default config
         self.config = {
             "finbert_name_or_path": "ProsusAI/finbert",
             "device": torch.device("cpu"),
-            "local_files_only": False,
-            "bert_hidden_dim": 768,  # must match finbert hidden size
+            "local_files_only": True,
+            "bert_hidden_dim": 768,
             "lstm_hidden_dim": 256,
             "lstm_num_layers": 1,
-            "lstm_dropout": 0.1,
-            "forecast_duration": 7,
+            "FORECAST_HORIZON": 7,
         }
 
         self.config.update(config)
         self.device = self.config["device"]
 
-        # finBert Encoder
         self.finbert = AutoModel.from_pretrained(
             self.config["finbert_name_or_path"],
             local_files_only=self.config["local_files_only"],
         )
 
-        # lstm decoder
-        self.lstm = nn.LSTM(
+        self.encoder_lstm = nn.LSTM(
             input_size=self.config["bert_hidden_dim"],
             hidden_size=self.config["lstm_hidden_dim"],
             num_layers=self.config["lstm_num_layers"],
-            dropout=self.config["lstm_dropout"]
-            if self.config["lstm_num_layers"] > 1
-            else 0.0,
             batch_first=True,
         )
 
-        # forecast head
-        self.regressor = nn.Sequential(
-            nn.Linear(
-                self.config["lstm_hidden_dim"], self.config["lstm_hidden_dim"] // 2
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                self.config["lstm_hidden_dim"] // 2, self.config["forecast_duration"]
-            ),
+        # (hidden + 3 floats) → hidden_dim
+        self.feature_projection = nn.Linear(
+            self.config["lstm_hidden_dim"] + 3, self.config["lstm_hidden_dim"]
         )
+
+        self.decoder_lstm = nn.LSTM(
+            input_size=1,
+            hidden_size=self.config["lstm_hidden_dim"],
+            num_layers=self.config["lstm_num_layers"],
+            batch_first=True,
+        )
+
+        self.regressor = nn.Linear(self.config["lstm_hidden_dim"], 1)
 
         self.to(self.device)
 
     def forward(self, inputs):
+        """
+        inputs:
+        {
+            "input_ids": (B, W, L)
+            "attention_mask": (B, W, L)
+            "extra_features": (B, 3)
+        }
+        """
+
         input_ids = inputs["input_ids"].to(self.device)
         attention_mask = inputs["attention_mask"].to(self.device)
-        token_type_ids = inputs.get("token_type_ids")
+        extra_features = inputs["extra_features"].to(self.device)  # (B, 2)
 
-        if token_type_ids is not None:
-            token_type_ids = token_type_ids.to(self.device)
+        closes = inputs["closes"][:, -1].to(self.device)  # (B,)
+        closes = closes.unsqueeze(1)  # (B, 1)
+        extra_features = torch.cat([closes, extra_features], dim=1)
+
+        B, W, L = input_ids.shape
+
+        input_ids = input_ids.view(B * W, L)
+        attention_mask = attention_mask.view(B * W, L)
 
         outputs = self.finbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
         )
 
-        sequence_output = outputs.last_hidden_state
+        cls_embeddings = outputs.last_hidden_state[:, 0, :]
+        cls_embeddings = cls_embeddings.view(B, W, -1)  # (B, W, 768)
 
-        lstm_out, (h_n, c_n) = self.lstm(sequence_output)
+        _, (h_n, c_n) = self.encoder_lstm(cls_embeddings)
 
-        final_hidden = h_n[-1]
+        encoder_hidden = h_n[-1]  # (B, hidden_dim)
 
-        forecast = self.regressor(final_hidden)
+        conditioned_hidden = torch.cat(
+            [encoder_hidden, extra_features], dim=1
+        )  # (B, hidden_dim + 3)
 
-        return forecast
+        projected_hidden = torch.tanh(
+            self.feature_projection(conditioned_hidden)
+        )  # (B, hidden_dim)
+
+        decoder_hidden = (
+            projected_hidden.unsqueeze(0),  # h_0
+            c_n,  # reuse encoder cell
+        )
+
+        forecast_steps = self.config["FORECAST_HORIZON"]
+
+        decoder_input = torch.zeros(B, 1, 1, device=self.device)
+        outputs = []
+
+        for _ in range(forecast_steps):
+            out, decoder_hidden = self.decoder_lstm(decoder_input, decoder_hidden)
+
+            pred = self.regressor(out)  # (B,1,1)
+            outputs.append(pred)
+            decoder_input = pred  # autoregressive
+
+        outputs = torch.cat(outputs, dim=1)  # (B, T, 1)
+        return outputs.squeeze(-1)  # (B, T)
 
 
 if __name__ == "__main__":
@@ -103,7 +127,7 @@ if __name__ == "__main__":
     config = {
         "finbert_name_or_path": "ProsusAI/finbert",
         "device": device,
-        "forecast_duration": 7,
+        "FORECAST_HORIZON": 7,
         "lstm_hidden_dim": 256,
     }
     model = FinBertForecastingBL(config)
