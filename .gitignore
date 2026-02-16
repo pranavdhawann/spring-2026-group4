@@ -129,3 +129,5 @@ docs/_build/
 *.bak
 *.old
 experiments/*
+/.claude
+/reports/experimental_results_lstm

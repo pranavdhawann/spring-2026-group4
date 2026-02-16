@@ -6,13 +6,12 @@ import torch.nn as nn
 class TimeSeriesModel(nn.Module):
     """
     Enhanced LSTM-based model for time series prediction.
-    
+
     Improvements:
-    - Optional attention mechanism
     - Layer normalization
     - Residual connections (optional)
     - Better initialization
-    
+
     Args:
         - input_size (int): Number of input features per timestep. Default: 5
         - hidden_size (int): LSTM hidden dimension. Default: 64
@@ -20,7 +19,6 @@ class TimeSeriesModel(nn.Module):
         - dropout (float): Dropout between LSTM layers. Default: 0.1
         - output_size (int): Number of output predictions. Default: 1
         - bidirectional (bool): Use bidirectional LSTM. Default: False
-        - use_attention (bool): Add attention mechanism. Default: False
         - use_layer_norm (bool): Add layer normalization. Default: True
     """
 
@@ -31,7 +29,6 @@ class TimeSeriesModel(nn.Module):
         "dropout": 0.1,
         "output_size": 1,
         "bidirectional": False,
-        "use_attention": False,
         "use_layer_norm": True,
     }
 
@@ -46,31 +43,22 @@ class TimeSeriesModel(nn.Module):
         self.dropout = self.config["dropout"]
         self.output_size = self.config["output_size"]
         self.bidirectional = self.config["bidirectional"]
-        self.use_attention = self.config["use_attention"]
         self.use_layer_norm = self.config["use_layer_norm"]
         self.num_directions = 2 if self.bidirectional else 1
 
         self.input_proj = nn.Linear(self.input_size, self.hidden_size)
-        
+
         if self.use_layer_norm:
             self.input_norm = nn.LayerNorm(self.hidden_size)
 
         self.lstm = nn.LSTM(
-            input_size=self.hidden_size, 
+            input_size=self.hidden_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
             dropout=self.dropout if self.num_layers > 1 else 0.0,
             batch_first=True,
             bidirectional=self.bidirectional,
         )
-
-        if self.use_attention:
-            attn_input_size = self.hidden_size * self.num_directions
-            self.attention = nn.Sequential(
-                nn.Linear(attn_input_size, attn_input_size // 2),
-                nn.Tanh(),
-                nn.Linear(attn_input_size // 2, 1)
-            )
 
         fc_input_size = self.hidden_size * self.num_directions
         self.fc = nn.Sequential(
@@ -106,24 +94,19 @@ class TimeSeriesModel(nn.Module):
         batch_size, seq_len, _ = x.shape
 
         x = self.input_proj(x)
-        
+
         if self.use_layer_norm:
             x = self.input_norm(x)
 
         # LSTM encoding
         lstm_out, (h_n, _) = self.lstm(x)
 
-        if self.use_attention:
-            attn_weights = self.attention(lstm_out) 
-            attn_weights = torch.softmax(attn_weights, dim=1)
-            context = (lstm_out * attn_weights).sum(dim=1)  
+        if self.bidirectional:
+            h_forward = h_n[-2]
+            h_backward = h_n[-1]
+            context = torch.cat([h_forward, h_backward], dim=1)
         else:
-            if self.bidirectional:
-                h_forward = h_n[-2]  
-                h_backward = h_n[-1]  
-                context = torch.cat([h_forward, h_backward], dim=1)
-            else:
-                context = h_n[-1]
+            context = h_n[-1]
 
         out = self.fc(context)
         return out
@@ -168,6 +151,43 @@ class SimpleLSTM(nn.Module):
         return self.fc(hidden)
 
 
+class Attention(nn.Module):
+    """
+    Additive (Bahdanau-style) attention over LSTM hidden states.
+
+    Computes a weighted sum of encoder outputs using a learned attention
+    scoring function, producing a fixed-size context vector.
+
+    Args:
+        hidden_size: Dimension of LSTM hidden states (per direction).
+        num_directions: 1 for unidirectional, 2 for bidirectional.
+    """
+
+    def __init__(self, hidden_size: int, num_directions: int = 1):
+        super().__init__()
+        input_dim = hidden_size * num_directions
+        self.attn = nn.Sequential(
+            nn.Linear(input_dim, input_dim),
+            nn.Tanh(),
+            nn.Linear(input_dim, 1, bias=False),
+        )
+
+    def forward(self, lstm_out: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            lstm_out: (batch_size, seq_len, hidden_size * num_directions)
+
+        Returns:
+            context: (batch_size, hidden_size * num_directions)
+        """
+        # (batch, seq_len, 1)
+        scores = self.attn(lstm_out)
+        weights = torch.softmax(scores, dim=1)
+        # Weighted sum over time steps
+        context = (weights * lstm_out).sum(dim=1)
+        return context
+
+
 class LSTMForecaster(nn.Module):
     """
     Config-driven LSTM for multi-step time-series forecasting.
@@ -183,8 +203,8 @@ class LSTMForecaster(nn.Module):
         dropout (float): Dropout rate. Default: 0.2
         output_size (int): Number of output predictions. Default: 7
         bidirectional (bool): Use bidirectional LSTM. Default: False
-        use_attention (bool): Add attention mechanism. Default: False
         use_layer_norm (bool): Add layer normalization. Default: True
+        use_attention (bool): Add attention over LSTM outputs. Default: False
         fc_hidden_sizes (list[int]): Sizes for FC head hidden layers. Default: [64, 32]
     """
 
@@ -195,8 +215,8 @@ class LSTMForecaster(nn.Module):
         "dropout": 0.2,
         "output_size": 7,
         "bidirectional": False,
-        "use_attention": False,
         "use_layer_norm": True,
+        "use_attention": False,
         "fc_hidden_sizes": [64, 32],
     }
 
@@ -211,8 +231,8 @@ class LSTMForecaster(nn.Module):
         self.dropout = self.config["dropout"]
         self.output_size = self.config["output_size"]
         self.bidirectional = self.config["bidirectional"]
-        self.use_attention = self.config["use_attention"]
         self.use_layer_norm = self.config["use_layer_norm"]
+        self.use_attention = self.config["use_attention"]
         self.fc_hidden_sizes = self.config["fc_hidden_sizes"]
         self.num_directions = 2 if self.bidirectional else 1
 
@@ -232,14 +252,9 @@ class LSTMForecaster(nn.Module):
             bidirectional=self.bidirectional,
         )
 
-        # Optional attention
+        # Attention (optional)
         if self.use_attention:
-            attn_input_size = self.hidden_size * self.num_directions
-            self.attention = nn.Sequential(
-                nn.Linear(attn_input_size, attn_input_size // 2),
-                nn.Tanh(),
-                nn.Linear(attn_input_size // 2, 1),
-            )
+            self.attention = Attention(self.hidden_size, self.num_directions)
 
         # Configurable FC head
         fc_input_size = self.hidden_size * self.num_directions
@@ -263,7 +278,7 @@ class LSTMForecaster(nn.Module):
             if "weight" in name:
                 if "lstm" in name:
                     nn.init.orthogonal_(param)
-                else:
+                elif param.dim() >= 2:
                     nn.init.xavier_uniform_(param)
             elif "bias" in name:
                 nn.init.zeros_(param)
@@ -288,16 +303,13 @@ class LSTMForecaster(nn.Module):
         lstm_out, (h_n, _) = self.lstm(x)
 
         if self.use_attention:
-            attn_weights = self.attention(lstm_out)
-            attn_weights = torch.softmax(attn_weights, dim=1)
-            context = (lstm_out * attn_weights).sum(dim=1)
+            context = self.attention(lstm_out)
+        elif self.bidirectional:
+            h_forward = h_n[-2]
+            h_backward = h_n[-1]
+            context = torch.cat([h_forward, h_backward], dim=1)
         else:
-            if self.bidirectional:
-                h_forward = h_n[-2]
-                h_backward = h_n[-1]
-                context = torch.cat([h_forward, h_backward], dim=1)
-            else:
-                context = h_n[-1]
+            context = h_n[-1]
 
         out = self.fc(context)
         return out
@@ -314,8 +326,8 @@ class LSTMForecaster(nn.Module):
             f"  Hidden size:          {self.hidden_size}",
             f"  Num LSTM layers:      {self.num_layers}",
             f"  Bidirectional:        {self.bidirectional}",
-            f"  Attention:            {self.use_attention}",
             f"  Layer norm:           {self.use_layer_norm}",
+            f"  Attention:            {self.use_attention}",
             f"  FC hidden sizes:      {self.fc_hidden_sizes}",
             f"  Output size:          {self.output_size}",
             f"  Dropout:              {self.dropout}",
@@ -330,7 +342,6 @@ if __name__ == "__main__":
         "input_size": 14,
         "hidden_size": 128,
         "num_layers": 3,
-        "use_attention": True,
     }
 
     model = TimeSeriesModel(config)

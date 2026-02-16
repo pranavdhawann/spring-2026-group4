@@ -414,6 +414,97 @@ def split_train_val(
     return train_data, val_data
 
 
+class _PerSampleTargetScaler:
+    """
+    Stores per-sample anchor prices so predictions in ratio-space
+    can be converted back to dollar values via inverse_transform().
+    """
+
+    def __init__(self, anchors: np.ndarray):
+        self.anchors = anchors  # shape (N,)
+
+    def inverse_transform(self, data: np.ndarray) -> np.ndarray:
+        """
+        Args:
+            data: shape (N * horizon, 1)  -- as called by evaluate()
+        Returns:
+            Same shape, multiplied by per-sample anchor prices.
+        """
+        n_samples = len(self.anchors)
+        total = data.shape[0]
+        horizon = total // n_samples
+        reshaped = data.reshape(n_samples, horizon)
+        result = reshaped * self.anchors[:, np.newaxis]
+        return result.reshape(-1, 1)
+
+
+def _normalize_split(
+    features: np.ndarray,
+    targets: np.ndarray,
+    n_ohlcv: int,
+    n_technical: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Per-sample normalization for one data split.
+
+    - OHLCV prices (cols 0 .. n_ohlcv-2): divide by first close in window.
+    - Volume (col n_ohlcv-1):             divide by mean volume in window.
+    - Technical indicators (next n_technical cols): per-sample z-score.
+    - Temporal / remaining cols:           left unchanged (already [-1, 1]).
+    - Targets:                             divide by first close price.
+
+    Returns:
+        (norm_features, norm_targets, anchors)
+    """
+    n_samples, seq_len, n_feat = features.shape
+    norm_features = features.copy()
+    norm_targets = targets.copy()
+    anchors = np.ones(n_samples)
+
+    price_end = n_ohlcv - 1          # cols 0..3  (open, high, low, close)
+    vol_col = n_ohlcv - 1            # col 4      (volume)
+    tech_start = n_ohlcv             # col 5
+    tech_end = n_ohlcv + n_technical  # col 12
+
+    for i in range(n_samples):
+        window = features[i]  # (seq_len, n_feat)
+
+        # Anchor = first close price in the window (close is col 3)
+        close_col = min(3, n_feat - 1)
+        first_close = window[0, close_col]
+        if first_close == 0 or np.isnan(first_close):
+            first_close = 1.0
+        anchors[i] = first_close
+
+        # Normalize OHLCV price columns by first close
+        if n_ohlcv >= 4:
+            norm_features[i, :, 0:4] = window[:, 0:4] / first_close
+
+        # Normalize volume by mean volume in window
+        if n_ohlcv >= 5:
+            mean_vol = np.mean(np.abs(window[:, 4]))
+            if mean_vol == 0 or np.isnan(mean_vol):
+                mean_vol = 1.0
+            norm_features[i, :, 4] = window[:, 4] / mean_vol
+
+        # Per-sample z-score for technical indicator columns
+        for col in range(tech_start, min(tech_end, n_feat)):
+            col_data = window[:, col]
+            col_std = np.std(col_data)
+            col_mean = np.mean(col_data)
+            if col_std == 0 or np.isnan(col_std):
+                norm_features[i, :, col] = 0.0
+            else:
+                norm_features[i, :, col] = (col_data - col_mean) / col_std
+
+        # Temporal features (remaining cols) stay unchanged
+
+        # Normalize targets by first close
+        norm_targets[i] = targets[i] / first_close
+
+    return norm_features, norm_targets, anchors
+
+
 def normalize_features(
     train_features: np.ndarray,
     val_features: np.ndarray,
@@ -421,60 +512,52 @@ def normalize_features(
     train_targets: np.ndarray,
     val_targets: np.ndarray,
     test_targets: np.ndarray,
+    feature_groups: list = None,
 ) -> Tuple[
     np.ndarray, np.ndarray, np.ndarray,
     np.ndarray, np.ndarray, np.ndarray,
-    StandardScaler, StandardScaler,
+    object, object,
 ]:
     """
-    Fit StandardScaler on training data only, transform all splits.
+    Per-sample normalization: each window is normalized relative to itself.
 
-    Features are reshaped to (N * seq_len, num_features) for fitting.
-    Targets are reshaped to (N * horizon, 1) for fitting.
+    OHLCV prices  -> divide by first close price in window
+    Volume        -> divide by mean volume in window
+    Technical     -> per-sample z-score
+    Temporal      -> unchanged (already [-1, 1])
+    Targets       -> divide by first close price
 
     Returns:
-        Normalised versions of all six arrays, plus the fitted
-        feature_scaler and target_scaler.
+        Normalised arrays + (feature_scaler=None, target_scaler) for
+        API compatibility.  target_scaler supports inverse_transform().
     """
-    n_train, seq_len, n_feat = train_features.shape
-    horizon = train_targets.shape[1]
+    if feature_groups is None:
+        feature_groups = ["ohlcv", "technical", "temporal"]
 
-    # Feature scaler
-    feature_scaler = StandardScaler()
-    train_flat = train_features.reshape(-1, n_feat)
-    feature_scaler.fit(train_flat)
+    # Determine column counts based on which feature groups are present
+    n_ohlcv = 5 if "ohlcv" in feature_groups else 0
+    n_technical = 7 if "technical" in feature_groups else 0
 
-    train_features = feature_scaler.transform(
-        train_features.reshape(-1, n_feat)
-    ).reshape(n_train, seq_len, n_feat)
+    train_features, train_targets, _ = _normalize_split(
+        train_features, train_targets, n_ohlcv, n_technical
+    )
 
+    val_anchors = np.array([])
     if len(val_features) > 0:
-        val_features = feature_scaler.transform(
-            val_features.reshape(-1, n_feat)
-        ).reshape(len(val_features), seq_len, n_feat)
+        val_features, val_targets, val_anchors = _normalize_split(
+            val_features, val_targets, n_ohlcv, n_technical
+        )
 
+    test_anchors = np.array([])
     if len(test_features) > 0:
-        test_features = feature_scaler.transform(
-            test_features.reshape(-1, n_feat)
-        ).reshape(len(test_features), seq_len, n_feat)
+        test_features, test_targets, test_anchors = _normalize_split(
+            test_features, test_targets, n_ohlcv, n_technical
+        )
 
-    # Target scaler
-    target_scaler = StandardScaler()
-    target_scaler.fit(train_targets.reshape(-1, 1))
-
-    train_targets = target_scaler.transform(
-        train_targets.reshape(-1, 1)
-    ).reshape(n_train, horizon)
-
-    if len(val_targets) > 0:
-        val_targets = target_scaler.transform(
-            val_targets.reshape(-1, 1)
-        ).reshape(len(val_targets), horizon)
-
-    if len(test_targets) > 0:
-        test_targets = target_scaler.transform(
-            test_targets.reshape(-1, 1)
-        ).reshape(len(test_targets), horizon)
+    feature_scaler = None
+    target_scaler = _PerSampleTargetScaler(
+        test_anchors if len(test_anchors) > 0 else np.array([1.0])
+    )
 
     return (
         train_features, val_features, test_features,
@@ -550,7 +633,7 @@ def prepare_lstm_data(
     print(f"  Train: {len(train_feat)}, Val: {len(val_feat)}, Test: {len(test_feat)}")
 
     # Normalise
-    print("\nNormalising features and targets (fit on train only)...")
+    print("\nNormalising features and targets (per-sample)...")
     (
         train_feat, val_feat, test_feat,
         train_tgt, val_tgt, test_tgt,
@@ -558,6 +641,7 @@ def prepare_lstm_data(
     ) = normalize_features(
         train_feat, val_feat, test_feat,
         train_tgt, val_tgt, test_tgt,
+        feature_groups=feature_groups,
     )
 
     # Wrap in datasets

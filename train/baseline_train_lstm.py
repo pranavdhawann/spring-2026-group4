@@ -1,14 +1,9 @@
 """
 Training script for LSTM multi-stock forecasting baseline.
 
-Loads data via the preprocessing pipeline, trains an LSTMForecaster model,
-evaluates on a held-out test set, and saves all artefacts (metrics, checkpoints,
-training history, visualisations) to the reports directory.
-
 Usage:
     python -m train.baseline_train_lstm
     python -m train.baseline_train_lstm --epochs 50 --batch_size 32
-    python -m train.baseline_train_lstm --config config/lstm_baseline.yaml
 """
 
 import argparse
@@ -35,11 +30,6 @@ from src.utils import (
     set_seed,
 )
 
-
-# ---------------------------------------------------------------------------
-# Argument parsing
-# ---------------------------------------------------------------------------
-
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments with overrides for YAML config."""
     parser = argparse.ArgumentParser(
@@ -61,23 +51,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_config(args: argparse.Namespace) -> dict:
-    """
-    Load YAML config and merge with command-line overrides.
 
-    Priority: CLI args > LSTM YAML config > main config.yaml > defaults.
-    """
-    # Load main project config
     main_config = read_yaml("config/config.yaml")
-
-    # Load LSTM-specific config
     lstm_config = read_yaml(args.config)
 
-    # Merge: main config provides data paths, LSTM config provides model/train params
     config = {}
     config.update(main_config)
     config.update(lstm_config)
 
-    # Apply CLI overrides
     if args.epochs is not None:
         config["epochs"] = args.epochs
     if args.batch_size is not None:
@@ -92,11 +73,6 @@ def load_config(args: argparse.Namespace) -> dict:
         config["device"] = args.device
 
     return config
-
-
-# ---------------------------------------------------------------------------
-# Early stopping
-# ---------------------------------------------------------------------------
 
 class EarlyStopping:
     """
@@ -139,10 +115,6 @@ class EarlyStopping:
 
         return self.should_stop
 
-
-# ---------------------------------------------------------------------------
-# Training and evaluation
-# ---------------------------------------------------------------------------
 
 def train_one_epoch(
     model: nn.Module,
@@ -234,7 +206,6 @@ def evaluate(
     all_targets = np.concatenate(all_targets, axis=0)
     all_ticker_ids = np.concatenate(all_ticker_ids, axis=0)
 
-    # Inverse transform to original scale if scaler provided
     preds_orig = all_preds
     targets_orig = all_targets
     if target_scaler is not None:
@@ -247,7 +218,6 @@ def evaluate(
 
     metrics = calculate_regression_metrics(targets_orig, preds_orig)
 
-    # Per-stock predictions
     per_stock = {}
     unique_ids = np.unique(all_ticker_ids)
     for tid in unique_ids:
@@ -262,10 +232,6 @@ def evaluate(
         "per_stock": per_stock,
     }
 
-
-# ---------------------------------------------------------------------------
-# Visualizations
-# ---------------------------------------------------------------------------
 
 def create_visualizations(
     training_history: List[dict],
@@ -297,7 +263,6 @@ def create_visualizations(
     viz_dir = output_dir / "visualizations"
     viz_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Loss curves
     epochs = [h["epoch"] for h in training_history]
     train_losses = [h["train_loss"] for h in training_history]
     val_losses = [h["val_loss"] for h in training_history]
@@ -315,11 +280,8 @@ def create_visualizations(
     plt.close(fig)
     print(f"  Saved: {viz_dir / 'loss_curves.png'}")
 
-    # 2. Per-stock predictions
-    # Build reverse map: name -> id
     name_to_id = {v: k for k, v in ticker_id_to_name.items()}
 
-    # Select stocks to visualise: top tickers by quality score that exist in test data
     stocks_to_plot = []
     for ticker in top_tickers:
         tid = name_to_id.get(ticker)
@@ -328,7 +290,6 @@ def create_visualizations(
         if len(stocks_to_plot) >= max_stocks:
             break
 
-    # Fall back to whatever stocks are available if top_tickers don't match
     if not stocks_to_plot:
         for tid, (preds, tgts) in list(per_stock_preds.items())[:max_stocks]:
             name = ticker_id_to_name.get(tid, f"ID_{tid}")
@@ -337,16 +298,13 @@ def create_visualizations(
     for ticker_name, ticker_id in stocks_to_plot:
         preds, targets = per_stock_preds[ticker_id]
 
-        # Plot predicted vs actual for each sample's forecast horizon
-        # Flatten to show all predictions as a series
-        n_samples = min(len(preds), 50)  # Limit for readability
+        n_samples = min(len(preds), 50)  
         preds_flat = preds[:n_samples].flatten()
         targets_flat = targets[:n_samples].flatten()
         x_axis = np.arange(len(preds_flat))
 
         fig, axes = plt.subplots(3, 1, figsize=(14, 12))
 
-        # Plot 1: Predicted vs Actual
         axes[0].plot(x_axis, targets_flat, label="Actual", linewidth=1.5, alpha=0.8)
         axes[0].plot(x_axis, preds_flat, label="Predicted", linewidth=1.5, alpha=0.8)
         axes[0].set_title(f"{ticker_name} - Predicted vs Actual Stock Price")
@@ -355,7 +313,6 @@ def create_visualizations(
         axes[0].legend()
         axes[0].grid(True, alpha=0.3)
 
-        # Plot 2: Prediction error over time
         errors = preds_flat - targets_flat
         axes[1].plot(x_axis, errors, color="red", linewidth=1, alpha=0.7)
         axes[1].axhline(y=0, color="black", linestyle="--", alpha=0.5)
@@ -364,7 +321,6 @@ def create_visualizations(
         axes[1].set_ylabel("Error ($)")
         axes[1].grid(True, alpha=0.3)
 
-        # Plot 3: Residuals histogram
         axes[2].hist(errors, bins=30, edgecolor="black", alpha=0.7)
         axes[2].axvline(x=0, color="red", linestyle="--", alpha=0.7)
         axes[2].set_title(f"{ticker_name} - Residuals Distribution")
@@ -378,10 +334,6 @@ def create_visualizations(
         plt.close(fig)
         print(f"  Saved: pred_vs_actual_{safe_name}.png")
 
-
-# ---------------------------------------------------------------------------
-# Artifact saving
-# ---------------------------------------------------------------------------
 
 def save_artifacts(
     config: dict,
@@ -442,10 +394,6 @@ def save_artifacts(
     print(f"  Saved: scalers.pkl")
 
 
-# ---------------------------------------------------------------------------
-# Top tickers by quality score
-# ---------------------------------------------------------------------------
-
 def get_top_tickers(config: dict, n: int = 10) -> List[str]:
     """
     Get top N tickers by quality score from stock_scores_news_1.csv.
@@ -462,10 +410,6 @@ def get_top_tickers(config: dict, n: int = 10) -> List[str]:
     except Exception:
         return []
 
-
-# ---------------------------------------------------------------------------
-# Main training function
-# ---------------------------------------------------------------------------
 
 def train(train_config: dict = None) -> None:
     """
@@ -512,7 +456,6 @@ def train(train_config: dict = None) -> None:
         prepare_lstm_data(data_config)
     )
 
-    # Detect actual input size from data
     actual_input_size = train_dataset.features.shape[2]
     config["input_size"] = actual_input_size
 
@@ -529,8 +472,8 @@ def train(train_config: dict = None) -> None:
         "dropout": config.get("dropout", 0.2),
         "output_size": config.get("output_size", 7),
         "bidirectional": config.get("bidirectional", False),
-        "use_attention": config.get("use_attention", False),
         "use_layer_norm": config.get("use_layer_norm", True),
+        "use_attention": config.get("use_attention", False),
         "fc_hidden_sizes": config.get("fc_hidden_sizes", [64, 32]),
     }
     model = LSTMForecaster(model_config).to(device)
