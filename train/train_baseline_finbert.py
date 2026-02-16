@@ -119,10 +119,13 @@ def train(train_config):
         "epochs": 100,
         "batch_size": 8,
         "max_length": 512,
-        "lr": 1e-3,
+        "lr": {
+            "bert": 1e-5,
+            "lstm": 1e-3,
+        },
         "tokenizer_path": "ProsusAI/finbert",
         "local_files_only": True,
-        "sample_fraction": 0.5,
+        "sample_fraction": 0.25,
         "patience": 5,
         "bert_hidden_dim": 768,
         "lstm_hidden_dim": 32,
@@ -130,7 +133,7 @@ def train(train_config):
         "number_of_epochs_ran": 0,
         "y_true_vs_y_pred_max_points": 5000,
         "rand_seed": 42,
-        "verbose": True,
+        "verbose": False,
     }
     config.update(train_config)
     set_seed(config["rand_seed"])
@@ -204,7 +207,21 @@ def train(train_config):
     model.to(device)
 
     criterion = nn.MSELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+    optimizer = torch.optim.AdamW(
+        [
+            {
+                "params": model.finbert.parameters(),
+                "lr": config["lr"]["bert"],
+            },  # small LR for pretrained
+            {"params": model.encoder_lstm.parameters(), "lr": config["lr"]["lstm"]},
+            {"params": model.decoder_lstm.parameters(), "lr": config["lr"]["lstm"]},
+            {"params": model.regressor.parameters(), "lr": config["lr"]["lstm"]},
+            {
+                "params": model.feature_projection.parameters(),
+                "lr": config["lr"]["lstm"],
+            },
+        ]
+    )
 
     best_rmse = np.inf
     epochs_without_improvement = 0
@@ -240,7 +257,7 @@ def train(train_config):
             scaler.step(optimizer)
             scaler.update()
             if config["verbose"]:
-                print("     time taken to update parameters: ", time.time() - st_)
+                print("     time taken to forward + backward: ", time.time() - st_)
 
             total_loss += loss.item()
             loop.set_postfix(loss=f"{loss.item():.4f}")
@@ -262,8 +279,11 @@ def train(train_config):
                 )
                 X_test = convert_X_to_tensors(X_test, device=device)
 
-                y_pred_test = model(X_test)
-                loss_test = criterion(y_pred_test.squeeze(), y_test)
+                with autocast(device_type="cuda"):
+                    # y_pred = model(X)
+                    # loss = criterion(y_pred.squeeze(), y)
+                    y_pred_test = model(X_test)
+                    loss_test = criterion(y_pred_test.squeeze(), y_test)
 
                 test_loss += loss_test.item()
                 test_loop.set_postfix(loss=f"{loss_test.item():.4f}")
