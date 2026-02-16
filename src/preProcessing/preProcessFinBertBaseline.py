@@ -76,7 +76,7 @@ class FinBertCollator:
             targets = self._replace_none_with_avg_np(b["target"])
             _, _, targets = self._standardize_list_np(targets, mean, std)
 
-            X_ = [inputs["input_ids"], inputs["attention_mask"], closes[-1], mean, std]
+            X_ = [inputs["input_ids"], inputs["attention_mask"], closes, mean, std]
             X.append(X_)
             y.append(targets)
         if verbose:
