@@ -2,6 +2,7 @@ from typing import Dict
 
 import torch
 import torch.nn as nn
+from torch.amp import autocast
 from transformers import AutoModel, AutoTokenizer
 
 from src.utils import set_seed
@@ -79,45 +80,45 @@ class FinBertForecastingBL(nn.Module):
 
         input_ids = input_ids.view(B * W, L)
         attention_mask = attention_mask.view(B * W, L)
+        with autocast(device_type="cuda"):
+            outputs = self.finbert(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )
 
-        outputs = self.finbert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
+            cls_embeddings = outputs.last_hidden_state[:, 0, :]
+            cls_embeddings = cls_embeddings.view(B, W, -1)  # (B, W, 768)
 
-        cls_embeddings = outputs.last_hidden_state[:, 0, :]
-        cls_embeddings = cls_embeddings.view(B, W, -1)  # (B, W, 768)
+            _, (h_n, c_n) = self.encoder_lstm(cls_embeddings)
 
-        _, (h_n, c_n) = self.encoder_lstm(cls_embeddings)
+            encoder_hidden = h_n[-1]  # (B, hidden_dim)
 
-        encoder_hidden = h_n[-1]  # (B, hidden_dim)
+            conditioned_hidden = torch.cat(
+                [encoder_hidden, extra_features], dim=1
+            )  # (B, hidden_dim + 3)
 
-        conditioned_hidden = torch.cat(
-            [encoder_hidden, extra_features], dim=1
-        )  # (B, hidden_dim + 3)
+            projected_hidden = torch.tanh(
+                self.feature_projection(conditioned_hidden)
+            )  # (B, hidden_dim)
 
-        projected_hidden = torch.tanh(
-            self.feature_projection(conditioned_hidden)
-        )  # (B, hidden_dim)
+            decoder_hidden = (
+                projected_hidden.unsqueeze(0),  # h_0
+                c_n,  # reuse encoder cell
+            )
 
-        decoder_hidden = (
-            projected_hidden.unsqueeze(0),  # h_0
-            c_n,  # reuse encoder cell
-        )
+            forecast_steps = self.config["FORECAST_HORIZON"]
 
-        forecast_steps = self.config["FORECAST_HORIZON"]
+            decoder_input = torch.zeros(B, 1, 1, device=self.device)
+            outputs = []
 
-        decoder_input = torch.zeros(B, 1, 1, device=self.device)
-        outputs = []
+            for _ in range(forecast_steps):
+                out, decoder_hidden = self.decoder_lstm(decoder_input, decoder_hidden)
 
-        for _ in range(forecast_steps):
-            out, decoder_hidden = self.decoder_lstm(decoder_input, decoder_hidden)
+                pred = self.regressor(out)  # (B,1,1)
+                outputs.append(pred)
+                decoder_input = pred  # autoregressive
 
-            pred = self.regressor(out)  # (B,1,1)
-            outputs.append(pred)
-            decoder_input = pred  # autoregressive
-
-        outputs = torch.cat(outputs, dim=1)  # (B, T, 1)
+            outputs = torch.cat(outputs, dim=1)  # (B, T, 1)
         return outputs.squeeze(-1)  # (B, T)
 
 
