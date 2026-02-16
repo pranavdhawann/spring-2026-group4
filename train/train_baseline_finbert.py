@@ -112,26 +112,26 @@ def save_prediction_scatter(
 
 
 def train(train_config):
-    set_seed()
     config = {
         "yaml_config_path": "config/config.yaml",
         "experiment_path": "experiments/baseline/finbertForecasting",
-        "epochs": 10,
+        "epochs": 100,
         "batch_size": 8,
         "max_length": 512,
         "lr": 1e-3,
         "tokenizer_path": "ProsusAI/finbert",
         "local_files_only": True,
-        "sample_fraction": 0.005,
+        "sample_fraction": 0.2,
         "patience": 5,
         "bert_hidden_dim": 768,
         "lstm_hidden_dim": 32,
         "lstm_num_layers": 1,
         "number_of_epochs_ran": 0,
         "y_true_vs_y_pred_max_points": 5000,
+        "rand_seed": 42,
     }
-
     config.update(train_config)
+    set_seed(config["rand_seed"])
 
     yaml_config = read_yaml(config["yaml_config_path"])
     config.update(yaml_config)
@@ -233,6 +233,7 @@ def train(train_config):
             loop.set_postfix(loss=f"{loss.item():.4f}")
         print(f"Epoch {epoch + 1} | Loss: {total_loss / len(train_loader):.4f}")
         train_losses.append(total_loss / len(train_loader))
+        config["train_samples"] = len(train_loader) * config["batch_size"]
 
         model.eval()
         test_loss = 0.0
@@ -254,7 +255,7 @@ def train(train_config):
                 test_loop.set_postfix(loss=f"{loss_test.item():.4f}")
                 y_true.extend(y_test.view(-1).cpu().numpy())
                 y_pred.extend(y_pred_test.view(-1).cpu().numpy())
-
+            config["test_samples"] = len(test_loader) * config["batch_size"]
         y_true = np.array(y_true)
         y_pred = np.array(y_pred)
 
@@ -281,6 +282,7 @@ def train(train_config):
             test_losses,
             os.path.join(config["experiment_path"], "losses.png"),
         )
+
         save_prediction_scatter(
             y_true,
             y_pred,
@@ -295,6 +297,7 @@ def train(train_config):
 
         if epochs_without_improvement >= config["patience"]:
             print("     Early stopping!")
+            config["early_stopping_initiated"] = True
             break
         print(f"     Avg Test Loss: {avg_test_loss:.4f}\n")
 
