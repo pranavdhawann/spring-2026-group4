@@ -2,19 +2,23 @@
     "yaml_config_path": "config/config.yaml",
     "experiment_path": "experiments/baseline/finbertForecasting",
     "epochs": 100,
-    "batch_size": 8,
+    "batch_size": 7,
     "max_length": 512,
-    "lr": 0.001,
+    "lr": {
+        "bert": 1e-05,
+        "lstm": 0.001
+    },
     "tokenizer_path": "ProsusAI/finbert",
     "local_files_only": true,
-    "sample_fraction": 0.002,
+    "sample_fraction": 0.25,
     "patience": 5,
     "bert_hidden_dim": 768,
     "lstm_hidden_dim": 32,
     "lstm_num_layers": 1,
-    "number_of_epochs_ran": 0,
+    "number_of_epochs_ran": 7,
     "y_true_vs_y_pred_max_points": 5000,
     "rand_seed": 42,
+    "verbose": false,
     "DATA_FOLDER": "data",
     "NEWS_FOLDER": "data/multi-modal-dataset/sp500_news",
     "TIMES_SERIES_FOLDER": "data/multi-modal-dataset/sp500_time_series",
@@ -268,6 +272,6 @@
         "VTV": 233
     },
     "test_train_split": 0.2,
-    "train_samples": 336,
-    "test_samples": 88
+    "train_samples": 41853,
+    "test_samples": 10465
 }

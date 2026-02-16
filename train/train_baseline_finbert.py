@@ -116,8 +116,9 @@ def train(train_config):
     config = {
         "yaml_config_path": "config/config.yaml",
         "experiment_path": "experiments/baseline/finbertForecasting",
+        "load_pre_trained": False,
         "epochs": 100,
-        "batch_size": 8,
+        "batch_size": 7,
         "max_length": 512,
         "lr": {
             "bert": 1e-5,
@@ -135,6 +136,7 @@ def train(train_config):
         "rand_seed": 42,
         "verbose": False,
     }
+
     config.update(train_config)
     set_seed(config["rand_seed"])
 
@@ -203,8 +205,15 @@ def train(train_config):
     model_config = copy.deepcopy(config)
     model_config["device"] = device
     model = FinBertForecastingBL(model_config)
-    model = torch.compile(model)
-    model.to(device)
+
+    if config["load_pre_trained"]:
+        model_path = os.path.join(config["experiment_path"], "best_model.pth")
+        model = torch.compile(model)
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        print(" Loaded Pre Trained Model")
+    else:
+        model.to(device)
+        model = torch.compile(model)
 
     criterion = nn.MSELoss()
     optimizer = torch.optim.AdamW(
@@ -233,6 +242,8 @@ def train(train_config):
         model.train()
         loop = tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=False)
         st_ = time.time()
+        y_true = []
+        y_pred = []
         for X, y in loop:
             if config["verbose"]:
                 print("     time taken to retrive one batch: ", time.time() - st_)
@@ -248,9 +259,9 @@ def train(train_config):
             optimizer.zero_grad()
 
             st_ = time.time()
-            with autocast(device_type="cuda"):
-                y_pred = model(X)
-                loss = criterion(y_pred.squeeze(), y)
+            with autocast(device_type="cuda", dtype=torch.float16):
+                y_ = model(X)
+                loss = criterion(y_.squeeze(), y)
 
             scaler.scale(loss).backward()
 
@@ -262,6 +273,14 @@ def train(train_config):
             total_loss += loss.item()
             loop.set_postfix(loss=f"{loss.item():.4f}")
             st_ = time.time()
+
+            y_true.extend(y.detach().view(-1).cpu().numpy())
+            y_pred.extend(y_.detach().view(-1).cpu().numpy())
+        y_true = np.array(y_true)
+        y_pred = np.array(y_pred)
+
+        train_metrics = calculate_regression_metrics(y_true, y_pred)
+        print("     Train Metrics: ", train_metrics)
         print(f"Epoch {epoch + 1} | Loss: {total_loss / len(train_loader):.4f}")
         train_losses.append(total_loss / len(train_loader))
         config["train_samples"] = len(train_loader) * config["batch_size"]
@@ -279,7 +298,7 @@ def train(train_config):
                 )
                 X_test = convert_X_to_tensors(X_test, device=device)
 
-                with autocast(device_type="cuda"):
+                with autocast(device_type="cuda", dtype=torch.float16):
                     # y_pred = model(X)
                     # loss = criterion(y_pred.squeeze(), y)
                     y_pred_test = model(X_test)
@@ -287,20 +306,20 @@ def train(train_config):
 
                 test_loss += loss_test.item()
                 test_loop.set_postfix(loss=f"{loss_test.item():.4f}")
-                y_true.extend(y_test.view(-1).cpu().numpy())
-                y_pred.extend(y_pred_test.view(-1).cpu().numpy())
+                y_true.extend(y_test.detach().view(-1).cpu().numpy())
+                y_pred.extend(y_pred_test.detach().view(-1).cpu().numpy())
             config["test_samples"] = len(test_loader) * config["batch_size"]
         y_true = np.array(y_true)
         y_pred = np.array(y_pred)
 
-        metrics = calculate_regression_metrics(y_true, y_pred)
-        print("     Metrics: ", metrics)
+        test_metrics = calculate_regression_metrics(y_true, y_pred)
+        print("     Test Metrics: ", test_metrics)
         avg_test_loss = test_loss / len(test_loader)
 
         test_losses.append(avg_test_loss)
 
-        if metrics["rmse"] < best_rmse:
-            best_rmse = metrics["rmse"]
+        if test_metrics["rmse"] < best_rmse:
+            best_rmse = test_metrics["rmse"]
             torch.save(
                 model.state_dict(),
                 os.path.join(config["experiment_path"], "best_model.pth"),
@@ -324,6 +343,10 @@ def train(train_config):
             config["y_true_vs_y_pred_max_points"],
         )
         with open(os.path.join(config["experiment_path"], "metrics.json"), "w") as f:
+            metrics = {
+                "train_": train_metrics,
+                "test_": test_metrics,
+            }
             json.dump(metrics, f, indent=4)
         config["number_of_epochs_ran"] = epoch
         with open(os.path.join(config["experiment_path"], "config.json"), "w") as f:
@@ -337,5 +360,5 @@ def train(train_config):
 
 
 if __name__ == "__main__":
-    train_config = {}
+    train_config = {"load_pre_trained": True}
     train(train_config)
