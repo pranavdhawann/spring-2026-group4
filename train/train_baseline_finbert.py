@@ -9,6 +9,7 @@ import math
 import os
 import pickle
 import random
+import time
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -121,7 +122,7 @@ def train(train_config):
         "lr": 1e-3,
         "tokenizer_path": "ProsusAI/finbert",
         "local_files_only": True,
-        "sample_fraction": 0.2,
+        "sample_fraction": 0.5,
         "patience": 5,
         "bert_hidden_dim": 768,
         "lstm_hidden_dim": 32,
@@ -129,6 +130,7 @@ def train(train_config):
         "number_of_epochs_ran": 0,
         "y_true_vs_y_pred_max_points": 5000,
         "rand_seed": 42,
+        "verbose": True,
     }
     config.update(train_config)
     set_seed(config["rand_seed"])
@@ -181,6 +183,7 @@ def train(train_config):
         num_workers=4,
         pin_memory=True,
         persistent_workers=True,
+        prefetch_factor=2,
     )
     test_loader = DataLoader(
         test_dataloader,
@@ -190,12 +193,11 @@ def train(train_config):
         num_workers=4,
         pin_memory=True,
         persistent_workers=True,
+        prefetch_factor=2,
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_config = copy.deepcopy(
-        config
-    )  # deepcopy if nested dicts, else copy.copy is enough
+    model_config = copy.deepcopy(config)
     model_config["device"] = device
     model = FinBertForecastingBL(model_config)
     model = torch.compile(model)
@@ -213,13 +215,22 @@ def train(train_config):
         total_loss = 0
         model.train()
         loop = tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=False)
+        st_ = time.time()
         for X, y in loop:
+            if config["verbose"]:
+                print("     time taken to retrive one batch: ", time.time() - st_)
+
             # y = torch.tensor(y, dtype=torch.float, device=device)
+
+            st_ = time.time()
             y = torch.as_tensor(np.array(y), dtype=torch.float, device=device)
             X = convert_X_to_tensors(X, device=device)
+            if config["verbose"]:
+                print("     time taken to convert to tensor: ", time.time() - st_)
 
             optimizer.zero_grad()
 
+            st_ = time.time()
             with autocast(device_type="cuda"):
                 y_pred = model(X)
                 loss = criterion(y_pred.squeeze(), y)
@@ -228,9 +239,12 @@ def train(train_config):
 
             scaler.step(optimizer)
             scaler.update()
+            if config["verbose"]:
+                print("     time taken to update parameters: ", time.time() - st_)
 
             total_loss += loss.item()
             loop.set_postfix(loss=f"{loss.item():.4f}")
+            st_ = time.time()
         print(f"Epoch {epoch + 1} | Loss: {total_loss / len(train_loader):.4f}")
         train_losses.append(total_loss / len(train_loader))
         config["train_samples"] = len(train_loader) * config["batch_size"]
