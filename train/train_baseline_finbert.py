@@ -118,23 +118,25 @@ def train(train_config):
         "experiment_path": "experiments/baseline/finbertForecasting",
         "load_pre_trained": False,
         "epochs": 100,
-        "batch_size": 7,
+        "batch_size": 64,
         "max_length": 512,
         "lr": {
             "bert": 1e-5,
-            "lstm": 1e-3,
+            "mlp": 1e-3,
         },
         "tokenizer_path": "ProsusAI/finbert",
         "local_files_only": True,
-        "sample_fraction": 0.25,
+        "sample_fraction": 1,
         "patience": 5,
-        "bert_hidden_dim": 768,
-        "lstm_hidden_dim": 32,
-        "lstm_num_layers": 1,
         "number_of_epochs_ran": 0,
         "y_true_vs_y_pred_max_points": 5000,
         "rand_seed": 42,
         "verbose": False,
+        "scheduled_sampling": "linear",
+        "mlp_hidden_dims": [128, 64],
+        "news_embedding_dim": 256,
+        "freeze_bert": False,
+        "max_window_size": 14,
     }
 
     config.update(train_config)
@@ -184,7 +186,7 @@ def train(train_config):
         train_dataloader,
         collate_fn=collator,
         batch_size=config["batch_size"],
-        shuffle=False,
+        shuffle=True,
         num_workers=4,
         pin_memory=True,
         persistent_workers=True,
@@ -221,15 +223,22 @@ def train(train_config):
             {
                 "params": model.finbert.parameters(),
                 "lr": config["lr"]["bert"],
-            },  # small LR for pretrained
-            {"params": model.encoder_lstm.parameters(), "lr": config["lr"]["lstm"]},
-            {"params": model.decoder_lstm.parameters(), "lr": config["lr"]["lstm"]},
-            {"params": model.regressor.parameters(), "lr": config["lr"]["lstm"]},
-            {
-                "params": model.feature_projection.parameters(),
-                "lr": config["lr"]["lstm"],
+                "weight_decay": config.get(
+                    "weight_decay_bert", 0.01
+                ),  # Optional: different weight decay for BERT
             },
-        ]
+            {
+                "params": model.news_projection.parameters(),  # Renamed from feature_projection
+                "lr": config["lr"]["mlp"],
+            },
+            {
+                "params": model.mlp_regressor.parameters(),  # The entire MLP
+                "lr": config["lr"]["mlp"],
+            },
+        ],
+        weight_decay=config.get(
+            "weight_decay", 0.01
+        ),  # Default weight decay for all groups
     )
 
     best_rmse = np.inf
@@ -360,5 +369,5 @@ def train(train_config):
 
 
 if __name__ == "__main__":
-    train_config = {"load_pre_trained": True}
+    train_config = {"load_pre_trained": False}
     train(train_config)

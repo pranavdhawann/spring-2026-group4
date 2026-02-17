@@ -18,156 +18,109 @@ class FinBertForecastingBL(nn.Module):
             "device": torch.device("cpu"),
             "local_files_only": True,
             "bert_hidden_dim": 768,
-            "lstm_hidden_dim": 256,
-            "lstm_num_layers": 1,
+            "news_embedding_dim": 256,
             "FORECAST_HORIZON": 7,
-            "teacher_forcing_ratio": 0.5,
-            "scheduled_sampling": "linear",  # Options: "linear", "exponential", "constant", None
+            "freeze_bert": True,
+            "mlp_hidden_dims": [128, 64],
+            "dropout_rate": 0.2,
+            "max_window_size": 10,
+            "empty_news_threshold": 2,
         }
 
         self.config.update(config)
         self.device = self.config["device"]
 
-        self.teacher_forcing_ratio = self.config.get("teacher_forcing_ratio", 0.5)
-        self.scheduled_sampling = self.config.get("scheduled_sampling", "linear")
         self.current_epoch = 0
         self.total_epochs = self.config.get("num_epochs", 100)
+        self.max_window_size = self.config.get("max_window_size", 10)
+        self.empty_news_threshold = self.config.get("empty_news_threshold", 2)
 
         self.finbert = AutoModel.from_pretrained(
             self.config["finbert_name_or_path"],
             local_files_only=self.config["local_files_only"],
         )
 
-        self.encoder_lstm = nn.LSTM(
-            input_size=self.config["bert_hidden_dim"],
-            hidden_size=self.config["lstm_hidden_dim"],
-            num_layers=self.config["lstm_num_layers"],
-            batch_first=True,
+        if self.config.get("freeze_bert", True):
+            for param in self.finbert.parameters():
+                param.requires_grad = False
+
+        self.news_projection = nn.Linear(
+            self.config["bert_hidden_dim"], self.config["news_embedding_dim"]
         )
 
-        self.feature_projection = nn.Linear(
-            self.config["lstm_hidden_dim"] + 3, self.config["lstm_hidden_dim"]
-        )
+        mlp_dims = self.config["mlp_hidden_dims"]
+        dropout_rate = self.config["dropout_rate"]
+        input_dim = self.config["news_embedding_dim"] + 3
 
-        self.decoder_lstm = nn.LSTM(
-            input_size=1,
-            hidden_size=self.config["lstm_hidden_dim"],
-            num_layers=self.config["lstm_num_layers"],
-            batch_first=True,
-        )
+        mlp_layers = []
+        for hidden_dim in mlp_dims:
+            mlp_layers.extend(
+                [nn.Linear(input_dim, hidden_dim), nn.ReLU(), nn.Dropout(dropout_rate)]
+            )
+            input_dim = hidden_dim
 
-        self.regressor = nn.Linear(self.config["lstm_hidden_dim"], 1)
-
+        # Final output layer
+        mlp_layers.append(nn.Linear(input_dim, self.config["FORECAST_HORIZON"]))
+        self.mlp_regressor = nn.Sequential(*mlp_layers)
         self.to(self.device)
 
-    def set_epoch(self, epoch: int):
-        self.current_epoch = epoch
+    def is_empty_news(self, input_ids: torch.Tensor) -> torch.Tensor:
+        non_padding = (input_ids != 0).sum(dim=-1)  # (B, W)
+        return non_padding <= self.empty_news_threshold
 
-    def get_current_teacher_forcing_ratio(self) -> float:
-        if self.scheduled_sampling is None:
-            return 0.0
+    def find_latest_news_indices(self, input_ids: torch.Tensor) -> torch.Tensor:
+        B, W, L = input_ids.shape
 
-        if self.scheduled_sampling == "constant":
-            return self.teacher_forcing_ratio
+        is_empty = self.is_empty_news(input_ids)  # (B, W)
+        positions = torch.arange(W, device=input_ids.device).expand(B, W)  # (B, W)
+        valid_positions = torch.where(~is_empty, positions, -1)  # (B, W)
+        latest_indices = valid_positions.max(dim=1)[0]  # (B,)
+        return latest_indices
 
-        elif self.scheduled_sampling == "linear":
-            progress = min(1.0, self.current_epoch / max(1, self.total_epochs - 1))
-            return max(0.0, self.teacher_forcing_ratio * (1 - progress))
-
-        elif self.scheduled_sampling == "exponential":
-            decay_rate = 0.9
-            return self.teacher_forcing_ratio * (decay_rate**self.current_epoch)
-
-        elif self.scheduled_sampling == "inverse_sigmoid":
-            k = 0.3  # Steepness param
-            progress = min(1.0, self.current_epoch / max(1, self.total_epochs - 1))
-            return self.teacher_forcing_ratio * (
-                1 - 1 / (1 + torch.exp(torch.tensor(-k * (progress - 0.5))))
-            )
-
-        else:
-            return self.teacher_forcing_ratio
-
-    def forward(self, inputs, targets=None, force_teacher_forcing=None):
-        """
-        Forward pass with optional teacher forcing
-
-        Args:
-            inputs: Dictionary containing:
-                - "input_ids": (B, W, L)
-                - "attention_mask": (B, W, L)
-                - "extra_features": (B, 3)
-                - "closes": (B, N) historical closes
-            targets: Optional ground truth future values (B, T) for teacher forcing
-            force_teacher_forcing: If True, force teacher forcing; if False, force no teacher forcing;
-                                  if None, use scheduled sampling
-
-        Returns:
-            outputs: (B, T) predicted values
-        """
-        input_ids = inputs["input_ids"].to(self.device)
-        attention_mask = inputs["attention_mask"].to(self.device)
-        extra_features = inputs["extra_features"].to(self.device)  # (B, 2)
-
-        closes = inputs["closes"][:, -1].to(self.device)  # (B,)
-        closes = closes.unsqueeze(1)  # (B, 1)
-        extra_features = torch.cat([closes, extra_features], dim=1)  # (B, 3)
+    def forward(self, inputs):
+        input_ids = inputs["input_ids"]  # (B, W, L)
+        attention_mask = inputs["attention_mask"]  # (B, W, L)
+        closes = inputs["closes"]  # (B, N)
+        extra_features = inputs["extra_features"]  # (B, 2)
 
         B, W, L = input_ids.shape
 
-        input_ids = input_ids.view(B * W, L)
-        attention_mask = attention_mask.view(B * W, L)
-
-        with autocast(device_type="cuda"):
-            outputs = self.finbert(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-            )
-
-        cls_embeddings = outputs.last_hidden_state[:, 0, :]
-        cls_embeddings = cls_embeddings.view(B, W, -1)  # (B, W, 768)
-
-        _, (h_n, c_n) = self.encoder_lstm(cls_embeddings)
-        encoder_hidden = h_n[-1]  # (B, hidden_dim)
-
-        # Condition on features
-        conditioned_hidden = torch.cat(
-            [encoder_hidden, extra_features], dim=1
-        )  # (B, hidden_dim + 3)
-        projected_hidden = torch.tanh(
-            self.feature_projection(conditioned_hidden)
-        )  # (B, hidden_dim)
-
-        # Initialize decoder
-        decoder_hidden = (
-            projected_hidden.unsqueeze(0),  # h_0 (num_layers, B, hidden_dim)
-            c_n,  # reuse encoder cell
+        last_close = closes[:, -1].unsqueeze(1)  # (B, 1)
+        combined_features = torch.cat([last_close, extra_features], dim=1)  # (B, 3)
+        latest_indices = self.find_latest_news_indices(input_ids)  # (B,)
+        has_news_mask = latest_indices >= 0  # (B,)
+        news_embeddings = torch.zeros(
+            B, self.config["bert_hidden_dim"], device=self.device
         )
 
-        forecast_steps = self.config["FORECAST_HORIZON"]
+        if has_news_mask.any():
+            news_batch_indices = torch.where(has_news_mask)[0]  # (M,)
+            news_window_indices = latest_indices[news_batch_indices]  # (M,)
+            latest_input_ids = input_ids[
+                news_batch_indices, news_window_indices
+            ]  # (M, L)
+            latest_attention_mask = attention_mask[
+                news_batch_indices, news_window_indices
+            ]  # (M, L)
 
-        use_teacher_forcing = False
-        if force_teacher_forcing is not None:
-            use_teacher_forcing = force_teacher_forcing
-        elif targets is not None and self.training:
-            teacher_forcing_ratio = self.get_current_teacher_forcing_ratio()
-            use_teacher_forcing = torch.rand(1).item() < teacher_forcing_ratio
+            with autocast(device_type="cuda"):
+                bert_outputs = self.finbert(
+                    input_ids=latest_input_ids,
+                    attention_mask=latest_attention_mask,
+                )
 
-        decoder_input = torch.zeros(B, 1, 1, device=self.device)
-        outputs = []
+            cls_embeddings = bert_outputs.last_hidden_state[:, 0, :]  # (M, 768)
+            news_embeddings[news_batch_indices] = cls_embeddings
 
-        for step in range(forecast_steps):
-            out, decoder_hidden = self.decoder_lstm(decoder_input, decoder_hidden)
-            pred = self.regressor(out)  # (B, 1, 1)
-            outputs.append(pred)
+        projected_news = self.news_projection(
+            news_embeddings
+        )  # (B, news_embedding_dim)
+        combined = torch.cat(
+            [projected_news, combined_features], dim=1
+        )  # (B, news_embedding_dim + 3)
+        predictions = self.mlp_regressor(combined)  # (B, FORECAST_HORIZON)
 
-            if use_teacher_forcing and targets is not None:
-                decoder_input = targets[:, step : step + 1].unsqueeze(-1)  # (B, 1, 1)
-            else:
-                decoder_input = pred
-
-        outputs = torch.cat(outputs, dim=1)  # (B, T, 1)
-        return outputs.squeeze(-1)  # (B, T)
+        return predictions
 
 
 if __name__ == "__main__":
@@ -178,86 +131,67 @@ if __name__ == "__main__":
         "finbert_name_or_path": "ProsusAI/finbert",
         "device": device,
         "FORECAST_HORIZON": 7,
-        "lstm_hidden_dim": 256,
-        "teacher_forcing_ratio": 0.7,
-        "scheduled_sampling": "linear",
-        "num_epochs": 100,
+        "news_embedding_dim": 256,
+        "mlp_hidden_dims": [128, 64],
+        "dropout_rate": 0.2,
+        "freeze_bert": True,
+        "max_window_size": 14,
+        "empty_news_threshold": 2,
     }
 
     model = FinBertForecastingBL(config)
     tokenizer = AutoTokenizer.from_pretrained(config["finbert_name_or_path"])
 
     print("\n" + "=" * 50)
-    print("DEMO: Teacher Forcing in Action")
+    print("TESTING VECTORIZED EMPTY NEWS DETECTION")
     print("=" * 50)
 
     texts = [
-        "Apple stock rose 3% after strong earnings report.",
-        "Market volatility increases amid inflation concerns.",
-        "Tesla shares drop following delivery miss.",
-    ] * 3  # Create 9 samples
+        "Apple stock rose 3% after strong earnings report.",  # Real news
+        "",  # Empty string
+        "Tesla shares drop following delivery miss.",  # Real news
+        "",  # Empty string
+        "Market volatility increases.",  # Real news
+    ]
 
-    batch_size = len(texts)
-    forecast_horizon = config["FORECAST_HORIZON"]
-
-    inputs = tokenizer(
+    tokenized = tokenizer(
         texts, padding=True, truncation=True, max_length=128, return_tensors="pt"
     )
 
-    # Create dummy input dictionary
+    window_size = 3
+    batch_size = len(texts)
+
+    input_ids = tokenized["input_ids"].unsqueeze(1).repeat(1, window_size, 1)
+    attention_mask = tokenized["attention_mask"].unsqueeze(1).repeat(1, window_size, 1)
+
+    print(f"\nInput shape: {input_ids.shape}")
+
+    print("\nVectorized empty news detection:")
+    is_empty = model.is_empty_news(input_ids)
+    for b in range(batch_size):
+        for w in range(window_size):
+            status = "EMPTY" if is_empty[b, w] else "HAS NEWS"
+            tokens = (input_ids[b, w] != 0).sum().item()
+            print(f"  Batch {b}, Window {w}: {status} ({tokens} tokens)")
+
+    latest_indices = model.find_latest_news_indices(input_ids)
+    print(f"\nLatest news indices: {latest_indices.cpu().numpy()}")
+
+    has_news = latest_indices >= 0
+    print(f"Batches with news: {has_news.cpu().numpy()}")
+
     dummy_inputs = {
-        "input_ids": inputs["input_ids"].unsqueeze(1),  # Add window dimension
-        "attention_mask": inputs["attention_mask"].unsqueeze(1),
-        "extra_features": torch.randn(batch_size, 2),  # Dummy extra features
-        "closes": torch.randn(batch_size, 30),  # Dummy historical closes
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "closes": torch.randn(batch_size, 30),
+        "extra_features": torch.randn(batch_size, 2),
     }
 
-    dummy_targets = torch.randn(batch_size, forecast_horizon)
-
-    print(
-        f"\n1. Training mode with teacher forcing (ratio={config['teacher_forcing_ratio']}):"
-    )
-    model.train()
-    model.set_epoch(0)  # Early epoch - high teacher forcing
-    with torch.no_grad():
-        train_outputs = model(dummy_inputs, targets=dummy_targets)
-    print(f"   Output shape: {train_outputs.shape}")
-    print(f"   Sample predictions: {train_outputs[0, :3].detach().cpu().numpy()}")
-
-    print("\n2. Training mode later epoch (reduced teacher forcing):")
-    model.set_epoch(80)  # Late epoch - low teacher forcing
-    with torch.no_grad():
-        train_outputs_late = model(dummy_inputs, targets=dummy_targets)
-    print(f"   Teacher forcing ratio: {model.get_current_teacher_forcing_ratio():.3f}")
-    print(f"   Sample predictions: {train_outputs_late[0, :3].detach().cpu().numpy()}")
-
-    print("\n3. Evaluation mode (no teacher forcing):")
-    model.eval()
-    with torch.no_grad():
-        eval_outputs = model(dummy_inputs, force_teacher_forcing=False)
-    print(f"   Sample predictions: {eval_outputs[0, :3].detach().cpu().numpy()}")
-
-    print("\n. Forced teacher forcing (for testing):")
-    with torch.no_grad():
-        forced_outputs = model(
-            dummy_inputs, targets=dummy_targets, force_teacher_forcing=True
-        )
-    print(f"   Sample predictions: {forced_outputs[0, :3].detach().cpu().numpy()}")
-
-    # Demo scheduled sampling strategies
-    print("\n" + "=" * 50)
-    print("SCHEDULED SAMPLING STRATEGIES")
-    print("=" * 50)
-
-    strategies = ["constant", "linear", "exponential", "inverse_sigmoid", None]
-    epochs = list(range(0, 101, 10))
-
-    for strategy in strategies:
-        print(f"\nStrategy: {strategy}")
-        model.config["scheduled_sampling"] = strategy
-        ratios = []
-        for epoch in epochs:
-            model.set_epoch(epoch)
-            ratio = model.get_current_teacher_forcing_ratio()
-            ratios.append(ratio)
-        print(f"   Teacher forcing ratios over epochs: {[f'{r:.3f}' for r in ratios]}")
+    try:
+        compiled_model = torch.compile(model)
+        with torch.no_grad():
+            predictions = compiled_model(dummy_inputs)
+        print("\n✓ torch.compile successful - no graph breaks!")
+        print(f"Predictions shape: {predictions.shape}")
+    except Exception as e:
+        print(f"\n✗ torch.compile failed: {e}")
