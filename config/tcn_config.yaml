@@ -1,0 +1,38 @@
+# TCN Baseline Configuration
+
+experiment_path: 'experiments/baseline/baseline_results_tcn'
+
+# Model architecture
+model:
+  input_size: 12
+  output_size: 7
+  num_channels: [64,128, 128, 256]
+  kernel_size: 3
+  dropout: 0.2
+  hidden_size: 128
+
+# Training
+training:
+  epochs: 10
+  batch_size: 32
+  learning_rate: 0.005
+  patience: 10
+  sample_fraction: 1.0
+  gradient_clip_val: 1.0
+
+# Preprocessing
+preprocessing:
+  features:
+    - open
+    - high
+    - low
+    - close
+    - volume
+  calculate_indicators: true
+  standardization: 'zscore'
+  target_type: 'price'
+
+# Evaluation
+evaluation:
+  num_plots: 10
+  max_scatter_points: 5000
