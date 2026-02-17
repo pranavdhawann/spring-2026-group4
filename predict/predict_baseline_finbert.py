@@ -192,17 +192,22 @@ def predict(predict_config):
     config = {
         "yaml_config_path": "config/config.yaml",
         "experiment_path": "experiments/baseline/finbertForecasting",
-        "batch_size": 7,
+        "batch_size": 4,
         "max_length": 512,
         "tokenizer_path": "ProsusAI/finbert",
         "local_files_only": True,
         "sample_fraction": 0.002,
         "bert_hidden_dim": 768,
-        "lstm_hidden_dim": 32,
+        "lstm_hidden_dim": 256,
         "lstm_num_layers": 1,
         "y_true_vs_y_pred_max_points": 5000,
         "rand_seed": 42,
         "verbose": False,
+        "scheduled_sampling": "linear",
+        "mlp_hidden_dims": [128, 64],
+        "news_embedding_dim": 256,
+        "freeze_bert": False,
+        "max_window_size": 14,
     }
 
     config.update(predict_config)

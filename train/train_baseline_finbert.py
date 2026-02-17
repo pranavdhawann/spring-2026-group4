@@ -369,5 +369,5 @@ def train(train_config):
 
 
 if __name__ == "__main__":
-    train_config = {"load_pre_trained": False}
+    train_config = {"load_pre_trained": True}
     train(train_config)
