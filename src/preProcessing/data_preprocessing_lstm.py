@@ -17,12 +17,14 @@ Usage:
     train_ds, val_ds, test_ds, feature_scalers, target_scalers = prepare_lstm_data(config)
 """
 
+import os
 import pickle
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset
@@ -30,6 +32,91 @@ from tqdm import tqdm
 
 from src.dataLoader import getTrainTestDataLoader
 from src.utils import read_json_file, read_yaml
+
+
+# ---------------------------------------------------------------------------
+# Memory cache -- read each BaselineDataLoader sample once, serve from RAM
+# ---------------------------------------------------------------------------
+
+_KEEP_KEYS = {"dates", "time_series", "target", "ticker_text", "ticker_id"}
+
+
+def _slim_sample(parsed: dict, ticker_text: str, ticker_id: int) -> dict:
+    """
+    Return a lightweight copy of *parsed* keeping only the fields that
+    the feature-engineering pipeline actually reads (dates, time_series,
+    target, ticker_text, ticker_id).  Drops articles, table_data, sector
+    etc. to cut per-sample RAM from ~100 KB down to ~5 KB.
+    """
+    slim = {k: parsed[k] for k in _KEEP_KEYS if k in parsed}
+    slim["ticker_text"] = ticker_text
+    slim["ticker_id"] = ticker_id
+    return slim
+
+
+def _build_memory_cache(dataloader: Dataset) -> dict:
+    """
+    Build an in-memory cache of all dataloader samples without calling
+    __getitem__ (which scans the JSONL from line 0 every call).
+
+    Instead, we inspect dataloader.config["data"] — a list of
+    (jsonl_path, line_idx, ticker_text, ticker_id) tuples — group them by
+    file, read each JSONL file exactly once top-to-bottom, and store only
+    the lines we need.  This reduces ~332k O(n) scans to one O(n) pass per
+    file (234 files total).
+
+    Only the keys needed for feature engineering are kept (see _slim_sample)
+    to stay well within 32 GB RAM.
+    """
+    import json
+    from collections import defaultdict
+
+    data_list = dataloader.config["data"]  # list of (path, line_idx, text, id)
+
+    # Group dataset indices by JSONL file path
+    # file_map[path] = [(dataset_idx, line_idx, ticker_text, ticker_id), ...]
+    file_map: dict = defaultdict(list)
+    for ds_idx, (jsonl_path, line_idx, ticker_text, ticker_id) in enumerate(data_list):
+        file_map[jsonl_path].append((ds_idx, line_idx, ticker_text, ticker_id))
+
+    cache: dict = {}
+
+    for jsonl_path, entries in tqdm(file_map.items(), desc="  Caching JSONL files to RAM"):
+        # Build a mapping from line_idx -> [(ds_idx, ticker_text, ticker_id)]
+        line_map: dict = defaultdict(list)
+        for ds_idx, line_idx, ticker_text, ticker_id in entries:
+            line_map[line_idx].append((ds_idx, ticker_text, ticker_id))
+
+        needed_lines = set(line_map.keys())
+        max_line = max(needed_lines)
+
+        with open(jsonl_path, "r") as f:
+            for current_line, raw in enumerate(f):
+                if current_line > max_line:
+                    break
+                if current_line not in needed_lines:
+                    continue
+                parsed = json.loads(raw)
+                for ds_idx, ticker_text, ticker_id in line_map[current_line]:
+                    cache[ds_idx] = _slim_sample(parsed, ticker_text, ticker_id)
+
+    return cache
+
+
+class _CachedDataset(Dataset):
+    """Thin wrapper that serves samples from an in-memory dict or list."""
+
+    def __init__(self, cache):
+        if isinstance(cache, list):
+            self._cache = {i: s for i, s in enumerate(cache)}
+        else:
+            self._cache = cache
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+    def __getitem__(self, idx: int):
+        return self._cache[idx]
 
 
 # ---------------------------------------------------------------------------
@@ -180,32 +267,27 @@ def compute_temporal_features(dates: List[str]) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def _rolling_mean(arr: np.ndarray, window: int) -> np.ndarray:
-    """Rolling mean with min_periods=1."""
-    out = np.zeros_like(arr)
-    for i in range(len(arr)):
-        start = max(0, i - window + 1)
-        out[i] = np.mean(arr[start : i + 1])
-    return out
+    """Rolling mean with min_periods=1 (Cython-backed via pandas)."""
+    s = pd.Series(arr)
+    return s.rolling(window, min_periods=1).mean().to_numpy()
 
 
 def _rolling_std(arr: np.ndarray, window: int) -> np.ndarray:
-    """Rolling standard deviation with min_periods=1."""
-    out = np.zeros_like(arr)
-    for i in range(len(arr)):
-        start = max(0, i - window + 1)
-        segment = arr[start : i + 1]
-        out[i] = np.std(segment) if len(segment) > 1 else 0.0
+    """Rolling standard deviation with min_periods=1 (Cython-backed via pandas).
+
+    Uses ddof=0 to match the original numpy.std behaviour.
+    """
+    s = pd.Series(arr)
+    out = s.rolling(window, min_periods=2).std(ddof=0).to_numpy()
+    # min_periods=2 leaves the first element as NaN; match original (0.0)
+    out = np.nan_to_num(out, nan=0.0)
     return out
 
 
 def _ema(arr: np.ndarray, span: int) -> np.ndarray:
-    """Exponential moving average."""
-    alpha = 2.0 / (span + 1)
-    out = np.zeros_like(arr)
-    out[0] = arr[0]
-    for i in range(1, len(arr)):
-        out[i] = alpha * arr[i] + (1 - alpha) * out[i - 1]
-    return out
+    """Exponential moving average (Cython-backed via pandas)."""
+    s = pd.Series(arr)
+    return s.ewm(span=span, adjust=False).mean().to_numpy()
 
 
 def _compute_rsi(close: np.ndarray, period: int) -> np.ndarray:
@@ -345,82 +427,53 @@ def _precompute_rsi_for_tickers(
     Groups all samples by ticker, extracts the close prices, builds a
     single contiguous close series (sorted by first date in each sample),
     and computes RSI over the full series.  Returns a dict mapping
-    ticker_text -> full RSI array.
+    ticker_text -> {date_str: rsi_value}.
 
-    The per-sample RSI slices are later looked up by matching dates.
+    After caching, dataloader[idx] is a dict lookup, so a simple loop is
+    faster (and far more memory-efficient) than spawning 416k futures.
     """
     from collections import defaultdict
 
-    ticker_closes: Dict[str, List[Tuple[str, np.ndarray, List[str]]]] = defaultdict(list)
-
+    # Pass 1: group close prices by ticker
+    ticker_closes: Dict[str, Dict[str, float]] = defaultdict(dict)
     n = len(dataloader)
 
-    # Parallelize sample loading for RSI precomputation
-    def load_sample_for_rsi(idx):
+    for idx in tqdm(range(n), desc="  Grouping closes for RSI"):
         sample = dataloader[idx]
         ticker = sample.get("ticker_text", "")
         ts = sample.get("time_series")
         dates = sample.get("dates")
         if not ts or not dates:
-            return None
-        close = np.array(
-            [t.get("close", 0.0) or 0.0 for t in ts], dtype=np.float64
-        )
-        return (ticker, dates[0], close, dates)
+            continue
+        date_to_close = ticker_closes[ticker]
+        for d, t in zip(dates, ts):
+            if d not in date_to_close:
+                c = t.get("close", 0.0)
+                date_to_close[d] = c if c is not None else 0.0
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(load_sample_for_rsi, idx) for idx in range(n)]
-        for future in tqdm(as_completed(futures), total=n, desc="  Loading for RSI"):
-            result = future.result()
-            if result:
-                ticker, first_date, close, dates = result
-                ticker_closes[ticker].append((first_date, close, dates))
-
+    # Pass 2: compute RSI once per ticker over its full sorted close series
     ticker_rsi: Dict[str, Dict[str, float]] = {}
-    for ticker, entries in ticker_closes.items():
-        # Sort windows by first date to get temporal order
-        entries.sort(key=lambda x: x[0])
-
-        # Build a date -> index mapping from all unique dates
-        date_to_close: Dict[str, float] = {}
-        for _, close_arr, dates_list in entries:
-            for d, c in zip(dates_list, close_arr):
-                if d not in date_to_close:
-                    date_to_close[d] = c
-
-        # Sort dates and build full close series
+    for ticker, date_to_close in ticker_closes.items():
         sorted_dates = sorted(date_to_close.keys())
-        full_close = np.array([date_to_close[d] for d in sorted_dates], dtype=np.float64)
-
-        # Compute RSI once over full series
+        full_close = np.array(
+            [date_to_close[d] for d in sorted_dates], dtype=np.float64
+        )
         full_rsi = _compute_rsi(full_close, period=min(14, len(full_close)))
-
-        # Build a date -> RSI value lookup
-        date_to_rsi = {d: full_rsi[i] for i, d in enumerate(sorted_dates)}
-        ticker_rsi[ticker] = date_to_rsi
+        ticker_rsi[ticker] = {d: full_rsi[i] for i, d in enumerate(sorted_dates)}
 
     return ticker_rsi
 
 
-def _load_and_process_sample(args):
-    """Worker function for parallel sample loading and processing."""
-    dataloader, idx, feature_groups, ticker_rsi = args
+def _process_sample(args):
+    """
+    Worker function for ProcessPoolExecutor.
 
-    # Load sample from disk (I/O operation)
-    sample = dataloader[idx]
+    Receives only the data it needs — the sample dict, a pre-resolved RSI
+    array (or None), and the feature_groups list — so Python only pickles
+    ~5 KB per task instead of the entire cached dataset.
+    """
+    sample, precomputed_rsi, feature_groups = args
 
-    # Extract precomputed RSI for this sample
-    precomputed_rsi = None
-    ticker = sample.get("ticker_text", "")
-    if ticker in ticker_rsi:
-        dates = sample.get("dates")
-        if dates:
-            rsi_values = ticker_rsi[ticker]
-            precomputed_rsi = np.array(
-                [rsi_values.get(d, 50.0) for d in dates], dtype=np.float64
-            )
-
-    # Compute features
     feat, tgt, dates = build_feature_matrix(
         sample, feature_groups, precomputed_rsi=precomputed_rsi
     )
@@ -439,21 +492,37 @@ def _load_and_process_sample(args):
     }
 
 
+def _resolve_rsi_for_sample(
+    sample: dict,
+    ticker_rsi: Dict[str, Dict[str, float]],
+) -> Optional[np.ndarray]:
+    """Look up the precomputed RSI values that correspond to this sample."""
+    ticker = sample.get("ticker_text", "")
+    if ticker not in ticker_rsi:
+        return None
+    dates = sample.get("dates")
+    if not dates:
+        return None
+    rsi_map = ticker_rsi[ticker]
+    return np.array([rsi_map.get(d, 50.0) for d in dates], dtype=np.float64)
+
+
 def process_dataloader(
     dataloader: Dataset,
     feature_groups: List[str],
     max_workers: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[dict]]:
     """
-    Iterate through a BaselineDataLoader and build feature matrices.
+    Iterate through a (cached) dataloader and build feature matrices.
 
-    Uses ThreadPoolExecutor to parallelize I/O and feature computation,
-    and precomputes RSI once per ticker to avoid redundant work.
+    Uses ProcessPoolExecutor to parallelize CPU-bound numpy/pandas work.
+    Each worker receives only its own sample (~5 KB) plus a small RSI array,
+    avoiding pickling the entire dataset.
 
     Args:
-        dataloader: A BaselineDataLoader instance.
+        dataloader: A _CachedDataset (or any Dataset) instance.
         feature_groups: Which feature groups to include.
-        max_workers: Number of parallel workers (default: CPU count * 2 for I/O).
+        max_workers: Number of parallel workers (default: os.cpu_count()).
 
     Returns:
         features: np.ndarray of shape (N, seq_len, num_features)
@@ -463,51 +532,45 @@ def process_dataloader(
     """
     n = len(dataloader)
 
-    # --- Step 1: Precompute RSI per ticker (parallelized) ---
+    # --- Step 1: Precompute RSI per ticker ---
     compute_rsi = "technical" in feature_groups
-    ticker_rsi = {}
+    ticker_rsi: Dict[str, Dict[str, float]] = {}
     if compute_rsi:
         print("  Precomputing RSI per ticker...")
         ticker_rsi = _precompute_rsi_for_tickers(dataloader, max_workers=max_workers)
 
-    # --- Step 2: Parallel I/O + feature computation ---
-    # Use ThreadPoolExecutor since I/O is the bottleneck (reading JSONL files)
-    # For I/O-bound tasks, threads are more efficient than processes
-    print(f"  Loading and processing samples in parallel (workers={max_workers or 'auto'})...")
+    # --- Step 2: Resolve RSI per sample and build lightweight arg tuples ---
+    # Each arg is (sample_dict, rsi_array_or_None, feature_groups) — only
+    # ~5 KB per sample, so pickle overhead for 8 workers is negligible.
+    workers = max_workers or os.cpu_count()
+    print(f"  Building feature matrices in parallel (workers={workers})...")
 
-    # Prepare arguments for each sample
-    args_list = [
-        (dataloader, idx, feature_groups, ticker_rsi)
-        for idx in range(n)
-    ]
+    def _arg_iter():
+        """Yield (sample, rsi, feature_groups) one at a time — no big list."""
+        for idx in range(n):
+            sample = dataloader[idx]
+            rsi = _resolve_rsi_for_sample(sample, ticker_rsi) if compute_rsi else None
+            yield (sample, rsi, feature_groups)
 
     all_features = []
     all_targets = []
     all_ticker_ids = []
     all_metadata = []
 
-    # Use ThreadPoolExecutor for I/O-bound operations
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(_load_and_process_sample, args): i
-            for i, args in enumerate(args_list)
-        }
-        results = [None] * len(args_list)
-        for future in tqdm(as_completed(futures), total=len(futures), desc="  Processing"):
-            idx = futures[future]
-            try:
-                results[idx] = future.result()
-            except Exception as e:
-                print(f"Error processing sample {idx}: {e}")
-                results[idx] = None
-
-    for result in results:
-        if result is None:
-            continue
-        all_features.append(result["features"])
-        all_targets.append(result["target"])
-        all_ticker_ids.append(result["ticker_id"])
-        all_metadata.append(result["metadata"])
+    # Use ProcessPoolExecutor with chunksize to amortise IPC overhead.
+    chunksize = max(1, n // (workers * 4))
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        for result in tqdm(
+            executor.map(_process_sample, _arg_iter(), chunksize=chunksize),
+            total=n,
+            desc="  Processing",
+        ):
+            if result is None:
+                continue
+            all_features.append(result["features"])
+            all_targets.append(result["target"])
+            all_ticker_ids.append(result["ticker_id"])
+            all_metadata.append(result["metadata"])
 
     features = np.array(all_features, dtype=np.float64)
     targets = np.array(all_targets, dtype=np.float64)
@@ -756,6 +819,40 @@ def prepare_lstm_data(
     print("Loading data via BaselineDataLoader...")
     train_loader, test_loader = getTrainTestDataLoader(config)
 
+    # Cache both loaders into RAM so every subsequent access is O(1).
+    # _build_memory_cache strips bulky fields (articles, table_data, sector)
+    # keeping only what feature engineering needs (~5 KB/sample vs ~100 KB).
+    print("\nCaching train loader to RAM...")
+    train_cache = _build_memory_cache(train_loader)
+    print("Caching test loader to RAM...")
+    test_cache = _build_memory_cache(test_loader)
+
+    # Free the original BaselineDataLoader objects (they hold config["data"]
+    # which is a large list of tuples we no longer need).
+    del train_loader, test_loader
+
+    # --- Chronological re-split -----------------------------------
+    # The upstream _test_train_split shuffles randomly, which causes
+    # data leakage with stride-1 overlapping windows.  Merge both
+    # caches into one list (no extra copies — just move references),
+    # sort by the last date in each window, and split so that all
+    # windows whose end date <= cutoff go to train.
+    print("\nRe-splitting chronologically to prevent data leakage...")
+    all_samples = list(train_cache.values()) + list(test_cache.values())
+    del train_cache, test_cache          # free the old dicts
+
+    # Sort by the last date in the window (= the date just before the
+    # forecast horizon starts).
+    all_samples.sort(key=lambda s: (s.get("dates") or [""])[-1])
+
+    test_ratio = config.get("test_train_split", 0.2)
+    split_idx = int(len(all_samples) * (1 - test_ratio))
+
+    train_loader = _CachedDataset(all_samples[:split_idx])
+    test_loader = _CachedDataset(all_samples[split_idx:])
+    del all_samples                      # the two dicts now own the samples
+    print(f"  Chrono split: {len(train_loader)} train, {len(test_loader)} test")
+
     # Process train and test splits
     print("\nProcessing training data...")
     train_feat, train_tgt, train_ids, train_meta = process_dataloader(
@@ -815,7 +912,6 @@ def prepare_lstm_data(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import os
     import sys
 
     # Ensure project root is on path
