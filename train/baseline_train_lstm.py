@@ -299,21 +299,22 @@ def create_visualizations(
         preds, targets = per_stock_preds[ticker_id]
 
         n_samples = min(len(preds), 50)  
-        preds_flat = preds[:n_samples].flatten()
-        targets_flat = targets[:n_samples].flatten()
-        x_axis = np.arange(len(preds_flat))
+        # Use 0-th step (t+1) for visualization to avoid overlapping/repeated points from flatten()
+        preds_plot = preds[:n_samples, 0]
+        targets_plot = targets[:n_samples, 0]
+        x_axis = np.arange(len(preds_plot))
 
         fig, axes = plt.subplots(3, 1, figsize=(14, 12))
 
-        axes[0].plot(x_axis, targets_flat, label="Actual", linewidth=1.5, alpha=0.8)
-        axes[0].plot(x_axis, preds_flat, label="Predicted", linewidth=1.5, alpha=0.8)
-        axes[0].set_title(f"{ticker_name} - Predicted vs Actual Stock Price")
-        axes[0].set_xlabel("Time Step")
+        axes[0].plot(x_axis, targets_plot, label="Actual (t+1)", linewidth=1.5, alpha=0.8)
+        axes[0].plot(x_axis, preds_plot, label="Predicted (t+1)", linewidth=1.5, alpha=0.8)
+        axes[0].set_title(f"{ticker_name} - Predicted vs Actual Stock Price (One-Step Ahead)")
+        axes[0].set_xlabel("Time Step (Window Index)")
         axes[0].set_ylabel("Price ($)")
         axes[0].legend()
         axes[0].grid(True, alpha=0.3)
 
-        errors = preds_flat - targets_flat
+        errors = preds_plot - targets_plot
         axes[1].plot(x_axis, errors, color="red", linewidth=1, alpha=0.7)
         axes[1].axhline(y=0, color="black", linestyle="--", alpha=0.5)
         axes[1].set_title(f"{ticker_name} - Prediction Error Over Time")
@@ -460,9 +461,9 @@ def train(train_config: dict = None) -> None:
     config["input_size"] = actual_input_size
 
     batch_size = config.get("batch_size", 64)
-    train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dl = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_dl = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, prefetch_factor=2)
+    val_dl = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2, prefetch_factor=2)
+    test_dl = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=2, prefetch_factor=2)
 
     # 4. Model
     model_config = {

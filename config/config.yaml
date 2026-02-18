@@ -12,7 +12,11 @@ VOCAB_FILE: 'data/multi-modal-dataset/vocab.txt'
 # params to create baseline dataset
 BASELINE_DATA_PATH: 'data/baseline_data'
 TICKER2IDX: 'tickers2id.json' # relative to BASELINE_DATA_PATH
-HISTORY_WINDOW_SIZE: 14    # T - how many days of history
-FORECAST_HORIZON: 7         # M - how many days to predict
-STRIDE: 2                   # window step size
+#HISTORY_WINDOW_SIZE: 14    # T - how many days of history
+#FORECAST_HORIZON: 7         # M - how many days to predict
+#STRIDE: 2                   # window step size
 N_STOCKS: 250              # number of top stocks to be chosen from STOCK_SCORE_NEWS
+
+HISTORY_WINDOW_SIZE: 30    # T - how many days of history
+FORECAST_HORIZON: 3        # M - how many days to predict
+STRIDE: 1
