@@ -1,6 +1,22 @@
-# all the paths should be relative to src/
+# all the paths should be relative to project root
 DATA_FOLDER: 'data'
 NEWS_FOLDER: 'data/multi-modal-dataset/sp500_news'
 TIMES_SERIES_FOLDER: 'data/multi-modal-dataset/sp500_time_series'
 DATA_DICTIONARY: 'data/multi-modal-dataset/sp500stock_data_description.csv'
 STOCK_SCORE_NEWS: 'data/multi-modal-dataset/stock_scores_news_1.csv'
+TABULAR_DATA: 'data/multi-modal-dataset/sp500_table'
+STOCK_SCORE_TIMESERIES: 'data/multi-modal-dataset/all_stocks_ranked.csv'
+yoy_file: 'data/multi-modal-dataset/yoy_analysis_full.csv'
+VOCAB_FILE: 'data/multi-modal-dataset/vocab.txt'
+
+# params to create baseline dataset
+BASELINE_DATA_PATH: 'data/baseline_data'
+TICKER2IDX: 'tickers2id.json' # relative to BASELINE_DATA_PATH
+#HISTORY_WINDOW_SIZE: 14    # T - how many days of history
+#FORECAST_HORIZON: 7         # M - how many days to predict
+#STRIDE: 2                   # window step size
+N_STOCKS: 250              # number of top stocks to be chosen from STOCK_SCORE_NEWS
+
+HISTORY_WINDOW_SIZE: 30    # T - how many days of history
+FORECAST_HORIZON: 3        # M - how many days to predict
+STRIDE: 1

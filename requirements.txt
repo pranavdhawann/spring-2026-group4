@@ -70,3 +70,4 @@ websockets==16.0
 xxhash==3.6.0
 yarl==1.22.0
 yfinance==1.1.0
+scikit-learn==1.8.0

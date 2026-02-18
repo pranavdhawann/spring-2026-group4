@@ -1,0 +1,20 @@
+{
+    "n_epochs": 10,
+    "batch_size": 32,
+    "learning_rate": 0.005,
+    "patience": 10,
+    "gradient_clip_val": 1.0,
+    "input_size": 12,
+    "output_size": 7,
+    "num_channels": [
+        64,
+        128,
+        128,
+        256
+    ],
+    "kernel_size": 3,
+    "dropout": 0.2,
+    "hidden_size": 128,
+    "sample_fraction": 1.0,
+    "training_time_mins": 310.41
+}

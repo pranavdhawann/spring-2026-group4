@@ -1,0 +1,208 @@
+"""PyTorch LSTM model for time series forecasting."""
+import torch
+import torch.nn as nn
+
+
+class Attention(nn.Module):
+    """
+    Additive (Bahdanau-style) attention over LSTM hidden states.
+
+    Computes a weighted sum of encoder outputs using a learned attention
+    scoring function, producing a fixed-size context vector.
+
+    Args:
+        hidden_size: Dimension of LSTM hidden states (per direction).
+        num_directions: 1 for unidirectional, 2 for bidirectional.
+    """
+
+    def __init__(self, hidden_size: int, num_directions: int = 1):
+        super().__init__()
+        input_dim = hidden_size * num_directions
+        self.attn = nn.Sequential(
+            nn.Linear(input_dim, input_dim),
+            nn.Tanh(),
+            nn.Linear(input_dim, 1, bias=False),
+        )
+
+    def forward(self, lstm_out: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            lstm_out: (batch_size, seq_len, hidden_size * num_directions)
+
+        Returns:
+            context: (batch_size, hidden_size * num_directions)
+        """
+        # (batch, seq_len, 1)
+        scores = self.attn(lstm_out)
+        weights = torch.softmax(scores, dim=1)
+        # Weighted sum over time steps
+        context = (weights * lstm_out).sum(dim=1)
+        return context
+
+
+class LSTMForecaster(nn.Module):
+    """
+    Config-driven LSTM for multi-step time-series forecasting.
+
+    Extends the project's LSTM models with a configurable fully connected head
+    built dynamically from the ``fc_hidden_sizes`` list.  This allows
+    experimenting with different FC depths without changing code.
+
+    Args (via config dict, missing keys fall back to DEFAULTS):
+        input_size (int): Number of input features per timestep. Default: 16
+        hidden_size (int): LSTM hidden dimension. Default: 128
+        num_layers (int): Number of stacked LSTM layers. Default: 2
+        dropout (float): Dropout rate. Default: 0.2
+        output_size (int): Number of output predictions. Default: 7
+        bidirectional (bool): Use bidirectional LSTM. Default: False
+        use_layer_norm (bool): Add layer normalization. Default: True
+        use_attention (bool): Add attention over LSTM outputs. Default: False
+        fc_hidden_sizes (list[int]): Sizes for FC head hidden layers. Default: [64, 32]
+    """
+
+    DEFAULTS = {
+        "input_size": 16,
+        "hidden_size": 128,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "output_size": 7,
+        "bidirectional": False,
+        "use_layer_norm": True,
+        "use_attention": False,
+        "fc_hidden_sizes": [64, 32],
+    }
+
+    def __init__(self, config: dict):
+        super().__init__()
+
+        self.config = {**self.DEFAULTS, **config}
+
+        self.input_size = self.config["input_size"]
+        self.hidden_size = self.config["hidden_size"]
+        self.num_layers = self.config["num_layers"]
+        self.dropout = self.config["dropout"]
+        self.output_size = self.config["output_size"]
+        self.bidirectional = self.config["bidirectional"]
+        self.use_layer_norm = self.config["use_layer_norm"]
+        self.use_attention = self.config["use_attention"]
+        self.fc_hidden_sizes = self.config["fc_hidden_sizes"]
+        self.num_directions = 2 if self.bidirectional else 1
+
+        # Input projection
+        self.input_proj = nn.Linear(self.input_size, self.hidden_size)
+
+        if self.use_layer_norm:
+            self.input_norm = nn.LayerNorm(self.hidden_size)
+
+        # LSTM
+        self.lstm = nn.LSTM(
+            input_size=self.hidden_size,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_layers,
+            dropout=self.dropout if self.num_layers > 1 else 0.0,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+        )
+
+        # Attention (optional)
+        if self.use_attention:
+            self.attention = Attention(self.hidden_size, self.num_directions)
+
+        # Configurable FC head
+        fc_input_size = self.hidden_size * self.num_directions
+        fc_layers = []
+        prev_size = fc_input_size
+        for fc_size in self.fc_hidden_sizes:
+            fc_layers.extend([
+                nn.Linear(prev_size, fc_size),
+                nn.ReLU(),
+                nn.Dropout(self.dropout),
+            ])
+            prev_size = fc_size
+        fc_layers.append(nn.Linear(prev_size, self.output_size))
+        self.fc = nn.Sequential(*fc_layers)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        """Weight initialization: orthogonal for LSTM, Xavier for others."""
+        for name, param in self.named_parameters():
+            if "weight" in name:
+                if "lstm" in name:
+                    nn.init.orthogonal_(param)
+                elif param.dim() >= 2:
+                    nn.init.xavier_uniform_(param)
+            elif "bias" in name:
+                nn.init.zeros_(param)
+
+    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Args:
+            x: Input tensor of shape (batch_size, seq_len, input_size)
+
+        Returns:
+            Output tensor of shape (batch_size, output_size)
+        """
+        batch_size, seq_len, _ = x.shape
+
+        x = self.input_proj(x)
+
+        if self.use_layer_norm:
+            x = self.input_norm(x)
+
+        lstm_out, (h_n, _) = self.lstm(x)
+
+        if self.use_attention:
+            context = self.attention(lstm_out)
+        elif self.bidirectional:
+            h_forward = h_n[-2]
+            h_backward = h_n[-1]
+            context = torch.cat([h_forward, h_backward], dim=1)
+        else:
+            context = h_n[-1]
+
+        out = self.fc(context)
+        return out
+
+    def get_model_summary(self) -> str:
+        """Return a string summary of model architecture and parameters."""
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(
+            p.numel() for p in self.parameters() if p.requires_grad
+        )
+        lines = [
+            "LSTMForecaster Summary",
+            f"  Input size:           {self.input_size}",
+            f"  Hidden size:          {self.hidden_size}",
+            f"  Num LSTM layers:      {self.num_layers}",
+            f"  Bidirectional:        {self.bidirectional}",
+            f"  Layer norm:           {self.use_layer_norm}",
+            f"  Attention:            {self.use_attention}",
+            f"  FC hidden sizes:      {self.fc_hidden_sizes}",
+            f"  Output size:          {self.output_size}",
+            f"  Dropout:              {self.dropout}",
+            f"  Total parameters:     {total_params:,}",
+            f"  Trainable parameters: {trainable_params:,}",
+        ]
+        return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    forecaster_config = {
+        "input_size": 16,
+        "hidden_size": 128,
+        "num_layers": 2,
+        "fc_hidden_sizes": [64, 32],
+        "output_size": 7,
+    }
+
+    forecaster = LSTMForecaster(forecaster_config)
+    x_fc = torch.randn(32, 14, 16)  # batch=32, seq_len=14, features=16
+    y_fc = forecaster(x_fc)
+
+    print(f"LSTMForecaster:")
+    print(f"  Input shape:  {x_fc.shape}")
+    print(f"  Output shape: {y_fc.shape}")
+    print(forecaster.get_model_summary())
