@@ -1,7 +1,3 @@
-"""
-TabNet model wrapper for stock price forecasting from tabular features
-(text-derived + time_series + table_data from baseline JSONL).
-"""
 
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -17,29 +13,19 @@ except ImportError:
     TabNetRegressor = None
     _TABNET_AVAILABLE = False
 
-
 class TabNetForecasting:
-    """
-    TabNet regressor for multi-step forecasting (e.g. 7-day ahead Close).
-    Config-driven, similar to FinBertForecastingBL.
-    """
-
     def __init__(self, config: Dict):
-        # Set seed without deterministic algorithms (TabNet doesn't need strict determinism)
-        # This avoids CuBLAS deterministic mode issues on CUDA
         import random
         import numpy as np
         seed = config.get("seed", 42)
         random.seed(seed)
         np.random.seed(seed)
-        # Don't call set_seed() here as it enables deterministic algorithms which conflicts with CuBLAS
         if not _TABNET_AVAILABLE:
             raise ImportError(
                 "pytorch-tabnet is required. Install with: pip install pytorch-tabnet"
             )
-
         self.config = {
-            "input_dim": None,  # set from data if None
+            "input_dim": None,
             "output_dim": 7,
             "n_d": 64,
             "n_a": 64,
@@ -81,9 +67,7 @@ class TabNetForecasting:
         X_val: Optional[np.ndarray] = None,
         y_val: Optional[np.ndarray] = None,
     ) -> "TabNetForecasting":
-        """
-        Train TabNet. y shape: (n_samples, output_dim).
-        """
+
         input_dim = X_train.shape[1]
         output_dim = y_train.shape[1] if y_train.ndim > 1 else 1
         if output_dim == 1 and y_train.ndim == 1:
@@ -129,7 +113,6 @@ class TabNetForecasting:
         self.model.load_model(path)
         self._fitted = True
         return self
-
 
 if __name__ == "__main__":
     np.random.seed(42)

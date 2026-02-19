@@ -1,8 +1,3 @@
-"""
-TabNet data loader: build tabular features from baseline JSONL.
-Each sample: text (NLP) + time_series + table_data -> single feature vector.
-Target: forecast horizon (e.g. 7 future Close prices).
-"""
 
 import os
 from typing import Callable, Dict, List, Optional, Tuple
@@ -14,10 +9,9 @@ from src.dataLoader.dataLoaderBaseline import getTrainTestDataLoader
 from src.utils import read_json_file, read_yaml, set_seed
 
 
-# Time series columns in baseline JSONL (lowercase keys in each day dict)
+
 TS_COLS = ["open", "high", "low", "close", "volume", "dividends", "stock splits"]
 
-# Table columns from baseline_dataset_creation (subset we use for features)
 TABLE_COLS = [
     "us-gaap_Assets",
     "us-gaap_AssetsCurrent",
@@ -27,10 +21,7 @@ TABLE_COLS = [
     "us-gaap_NetCashProvidedByUsedInOperatingActivities",
     "us-gaap_RetainedEarningsAccumulatedDeficit",
 ]
-
-
 def _flatten_articles(sample: Dict) -> List[str]:
-    """Extract all article strings from a sample (articles = list of list of str)."""
     texts = []
     for day_articles in sample.get("articles") or []:
         if not isinstance(day_articles, list):
@@ -42,10 +33,6 @@ def _flatten_articles(sample: Dict) -> List[str]:
 
 
 def _text_encoder_placeholder(texts: List[str], dim: int = 64) -> np.ndarray:
-    """
-    Placeholder text encoding: simple stats (count, mean length) + zeros.
-    Replace with real encoder (e.g. FinBERT mean pool) in train script.
-    """
     vec = np.zeros(dim, dtype=np.float32)
     if not texts:
         return vec
@@ -57,9 +44,8 @@ def _text_encoder_placeholder(texts: List[str], dim: int = 64) -> np.ndarray:
 
 
 def _time_series_features(ts_list: List[Dict]) -> np.ndarray:
-    """Extract numeric features from time_series window (last close, mean close, etc.)."""
     if not ts_list:
-        return np.zeros(len(TS_COLS) * 3, dtype=np.float32)  # min/mean/max per col
+        return np.zeros(len(TS_COLS) * 3, dtype=np.float32)
 
     values = {col: [] for col in TS_COLS}
     for day in ts_list:
@@ -76,7 +62,6 @@ def _time_series_features(ts_list: List[Dict]) -> np.ndarray:
 
 
 def _table_features(table_list: List[Dict]) -> np.ndarray:
-    """Use last row of table_data; fill missing with 0."""
     feats = []
     if not table_list:
         return np.zeros(len(TABLE_COLS), dtype=np.float32)
@@ -97,12 +82,6 @@ def _sample_to_vector(
     text_encoder: Optional[Callable[[List[str]], np.ndarray]] = None,
     text_dim: int = 64,
 ) -> Tuple[np.ndarray, np.ndarray, Dict]:
-    """
-    Convert one JSONL sample to (X, y, meta).
-    X: 1D feature vector (text_feats + time_series_feats + table_feats).
-    y: target array (forecast_horizon values).
-    meta: dict with dates, input_price (last close), ticker_text, ticker_id for plotting.
-    """
     if text_encoder is not None:
         texts = _flatten_articles(sample)
         text_feats = text_encoder(texts)
@@ -115,14 +94,11 @@ def _sample_to_vector(
     table_feats = _table_features(sample.get("table_data") or [])
 
     X = np.concatenate([text_feats, ts_feats, table_feats]).astype(np.float32)
-
     target = sample.get("target") or []
     y = np.array(
         [float(t) if t is not None else np.nan for t in target],
         dtype=np.float32,
     )
-
-    # Input price = last close in history window
     ts_list = sample.get("time_series") or []
     input_price = np.nan
     if ts_list:
@@ -141,8 +117,6 @@ def _sample_to_vector(
     }
     return X, y, meta
 
-
-# Batch size for feature building: process this many samples at a time to limit memory
 FEATURE_BATCH_SIZE = 5000
 
 
@@ -152,14 +126,6 @@ def build_tabnet_features(
     text_dim: int = 64,
     batch_size: int = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[Dict], List[Dict]]:
-    """
-    Load baseline train/test splits and build TabNet feature matrices.
-    Processes samples in batches to avoid loading all data at once.
-
-    Returns:
-        X_train, y_train, X_test, y_test (numpy arrays),
-        meta_train, meta_test (list of meta dicts for each sample).
-    """
     set_seed()
     if batch_size is None:
         batch_size = config.get("feature_batch_size", FEATURE_BATCH_SIZE)
@@ -191,7 +157,7 @@ def build_tabnet_features(
                 X_list.append(np.stack(batch_x, axis=0))
                 y_list.append(np.stack(batch_y, axis=0))
                 meta_list.extend(batch_meta)
-        # Concatenate batches into single arrays
+
         if not X_list:
             return [], [], []
         return (
@@ -207,7 +173,6 @@ def build_tabnet_features(
         raise ValueError("No valid samples after feature building (all targets NaN?).")
 
     return X_train, y_train, X_test, y_test, meta_train, meta_test
-
 
 if __name__ == "__main__":
     import os
