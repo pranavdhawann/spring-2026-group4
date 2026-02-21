@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import numpy as np
 import torch
-from src.dataLoader.dataLoaderTabNet import build_tabnet_features
+from src.preProcessing import build_tabnet_features
 
 from src.models.tabnet_forecasting import TabNetForecasting
 from src.utils import read_json_file, read_yaml, set_seed
@@ -31,15 +31,13 @@ def _safe_set_seed(seed=42):
 import src.utils.utils as utils_module
 utils_module.set_seed = _safe_set_seed
 set_seed = _safe_set_seed
-TEXT_MAX_ARTICLES = 50
-TEXT_MAX_LENGTH = 256
 
 
-def _make_text_encoder(embed_dim: int = 64, max_length: int = None, max_articles: int = None):
-    if max_length is None:
-        max_length = TEXT_MAX_LENGTH
-    if max_articles is None:
-        max_articles = TEXT_MAX_ARTICLES
+def _make_text_encoder(
+    embed_dim: int = 64,
+    max_length: int = 256,
+    max_articles: int = 50,
+):
     try:
         from transformers import AutoModel, AutoTokenizer
     except ImportError:
@@ -83,14 +81,21 @@ def _make_text_encoder(embed_dim: int = 64, max_length: int = None, max_articles
 def _build_features_with_encoder(config, use_nlp_encoder: bool = True):
     text_encoder = None
     text_dim = 64
+    text_cfg = config.get("text_encoding") or {}
     if use_nlp_encoder:
-        enc = _make_text_encoder(embed_dim=64, max_length=TEXT_MAX_LENGTH, max_articles=TEXT_MAX_ARTICLES)
+        enc = _make_text_encoder(
+            embed_dim=64,
+            max_length=text_cfg.get("max_length", 256),
+            max_articles=text_cfg.get("max_articles", 50),
+        )
         if enc is not None:
             text_encoder = enc
             text_dim = 64
     return build_tabnet_features(
         config, text_encoder=text_encoder, text_dim=text_dim
     )
+
+
 def _save_metrics(metrics: dict, out_dir: Path):
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -199,12 +204,17 @@ def train(train_config: dict = None):
 
     config = {
         "yaml_config_path": str(project_root / "config" / "config.yaml"),
-        "experiment_path": str(project_root / "experiments" / "baseline" / "baseline_results_tabnet"),
     }
     config.update(train_config)
 
     yaml_config = read_yaml(config["yaml_config_path"])
     config.update(yaml_config)
+
+    tabnet_config_path = project_root / "config" / "tabnet_config.yaml"
+    tabnet_config = read_yaml(str(tabnet_config_path))
+    config["experiment_path"] = str(project_root / tabnet_config.get("experiment_path", "experiments/baseline/baseline_results_tabnet"))
+    config.setdefault("preprocessing", {}).update(tabnet_config.get("preprocessing", {}))
+    config["text_encoding"] = tabnet_config.get("text_encoding", {})
 
     ticker2idx = read_json_file(
         os.path.join(config["BASELINE_DATA_PATH"], config["TICKER2IDX"])
@@ -212,9 +222,8 @@ def train(train_config: dict = None):
     data_config = {
         "data_path": config["BASELINE_DATA_PATH"],
         "ticker2idx": ticker2idx,
-        "test_train_split": 0.2,
-        "random_seed": 42,
     }
+    data_config.update(tabnet_config.get("preprocessing", {}))
     config.update(data_config)
 
     print("Building TabNet features from baseline JSONL...")
@@ -222,21 +231,15 @@ def train(train_config: dict = None):
         config, use_nlp_encoder=True
     )
 
-    y_train_nan_mask = np.isnan(y_train)
     y_train_fit = np.nan_to_num(y_train, nan=0.0)
-
     y_test_flat = y_test.flatten()
-    y_test_valid = y_test_flat[~np.isnan(y_test_flat)]
 
     print(f"Train: X {X_train.shape}, y {y_train.shape}")
     print(f"Test:  X {X_test.shape}, y {y_test.shape}")
 
-    model_config = {
-        "output_dim": y_train.shape[1],
-        "max_epochs": config.get("tabnet_max_epochs", 30),
-        "patience": config.get("tabnet_patience", 10),
-        "batch_size": config.get("tabnet_batch_size", 512),
-    }
+    model_config = dict(tabnet_config.get("model", {}))
+    model_config.update(tabnet_config.get("training", {}))
+    model_config["output_dim"] = y_train.shape[1]
     model = TabNetForecasting(model_config)
 
     n_train = len(X_train)

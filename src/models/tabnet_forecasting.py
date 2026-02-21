@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -13,36 +12,22 @@ except ImportError:
     TabNetRegressor = None
     _TABNET_AVAILABLE = False
 
+
 class TabNetForecasting:
+    """TabNet regressor for multi-step forecasting. All params from config (tabnet_config.yaml)."""
+
     def __init__(self, config: Dict):
-        import random
-        import numpy as np
-        seed = config.get("seed", 42)
-        random.seed(seed)
-        np.random.seed(seed)
         if not _TABNET_AVAILABLE:
             raise ImportError(
                 "pytorch-tabnet is required. Install with: pip install pytorch-tabnet"
             )
-        self.config = {
-            "input_dim": None,
-            "output_dim": 7,
-            "n_d": 64,
-            "n_a": 64,
-            "n_steps": 5,
-            "gamma": 1.5,
-            "n_independent": 2,
-            "n_shared": 2,
-            "lambda_sparse": 1e-4,
-            "seed": 42,
-            "max_epochs": 200,
-            "patience": 25,
-            "batch_size": 256,
-            "virtual_batch_size": 128,
-            "eval_metric": ["mae"],
-            "device_name": "cuda",
-        }
-        self.config.update(config)
+        import random
+        seed = config.get("seed", 42)
+        random.seed(seed)
+        np.random.seed(seed)
+        # No in-code defaults: config must come from tabnet_config.yaml (model + training)
+        self.config = dict(config)
+        self.config.setdefault("input_dim", None)
         self.model: Optional[TabNetRegressor] = None
         self._fitted = False
 

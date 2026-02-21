@@ -1,18 +1,17 @@
-
 import os
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from tqdm import tqdm
 
-from src.dataLoader.dataLoaderBaseline import getTrainTestDataLoader
+from src.dataLoader import getTrainTestDataLoader
 from src.utils import read_json_file, read_yaml, set_seed
 
-
-
-TS_COLS = ["open", "high", "low", "close", "volume", "dividends", "stock splits"]
-
-TABLE_COLS = [
+# Defaults (overridden by config/tabnet_config.yaml)
+DEFAULT_TS_COLS = [
+    "open", "high", "low", "close", "volume", "dividends", "stock splits"
+]
+DEFAULT_TABLE_COLS = [
     "us-gaap_Assets",
     "us-gaap_AssetsCurrent",
     "us-gaap_Liabilities",
@@ -21,6 +20,16 @@ TABLE_COLS = [
     "us-gaap_NetCashProvidedByUsedInOperatingActivities",
     "us-gaap_RetainedEarningsAccumulatedDeficit",
 ]
+
+
+def _get_preprocessing_config(config: Dict) -> Dict:
+    """Get preprocessing section from config (supports flat or nested)."""
+    pre = config.get("preprocessing") or {}
+    if not isinstance(pre, dict):
+        pre = {}
+    return pre
+
+
 def _flatten_articles(sample: Dict) -> List[str]:
     texts = []
     for day_articles in sample.get("articles") or []:
@@ -43,30 +52,30 @@ def _text_encoder_placeholder(texts: List[str], dim: int = 64) -> np.ndarray:
     return vec
 
 
-def _time_series_features(ts_list: List[Dict]) -> np.ndarray:
+def _time_series_features(ts_list: List[Dict], ts_cols: List[str]) -> np.ndarray:
     if not ts_list:
-        return np.zeros(len(TS_COLS) * 3, dtype=np.float32)
+        return np.zeros(len(ts_cols) * 3, dtype=np.float32)
 
-    values = {col: [] for col in TS_COLS}
+    values = {col: [] for col in ts_cols}
     for day in ts_list:
-        for col in TS_COLS:
+        for col in ts_cols:
             v = day.get(col) if isinstance(day, dict) else None
             if v is not None and isinstance(v, (int, float)):
                 values[col].append(float(v))
 
     feats = []
-    for col in TS_COLS:
+    for col in ts_cols:
         arr = np.array(values[col]) if values[col] else np.array([0.0])
         feats.extend([np.min(arr), np.mean(arr), np.max(arr)])
     return np.array(feats, dtype=np.float32)
 
 
-def _table_features(table_list: List[Dict]) -> np.ndarray:
+def _table_features(table_list: List[Dict], table_cols: List[str]) -> np.ndarray:
     feats = []
     if not table_list:
-        return np.zeros(len(TABLE_COLS), dtype=np.float32)
+        return np.zeros(len(table_cols), dtype=np.float32)
     last = table_list[-1]
-    for col in TABLE_COLS:
+    for col in table_cols:
         v = last.get(col)
         if v is None:
             feats.append(0.0)
@@ -81,7 +90,11 @@ def _sample_to_vector(
     sample: Dict,
     text_encoder: Optional[Callable[[List[str]], np.ndarray]] = None,
     text_dim: int = 64,
+    ts_cols: Optional[List[str]] = None,
+    table_cols: Optional[List[str]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Dict]:
+    ts_cols = ts_cols or DEFAULT_TS_COLS
+    table_cols = table_cols or DEFAULT_TABLE_COLS
     if text_encoder is not None:
         texts = _flatten_articles(sample)
         text_feats = text_encoder(texts)
@@ -90,8 +103,8 @@ def _sample_to_vector(
             _flatten_articles(sample), dim=text_dim
         )
 
-    ts_feats = _time_series_features(sample.get("time_series") or [])
-    table_feats = _table_features(sample.get("table_data") or [])
+    ts_feats = _time_series_features(sample.get("time_series") or [], ts_cols)
+    table_feats = _table_features(sample.get("table_data") or [], table_cols)
 
     X = np.concatenate([text_feats, ts_feats, table_feats]).astype(np.float32)
     target = sample.get("target") or []
@@ -117,23 +130,23 @@ def _sample_to_vector(
     }
     return X, y, meta
 
-FEATURE_BATCH_SIZE = 5000
-
-
 def build_tabnet_features(
     config: Dict,
     text_encoder: Optional[Callable[[List[str]], np.ndarray]] = None,
-    text_dim: int = 64,
-    batch_size: int = None,
+    text_dim: Optional[int] = None,
+    batch_size: Optional[int] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[Dict], List[Dict]]:
     set_seed()
-    if batch_size is None:
-        batch_size = config.get("feature_batch_size", FEATURE_BATCH_SIZE)
+    pre = _get_preprocessing_config(config)
+    batch_size = batch_size or pre.get("feature_batch_size", 5000)
+    text_dim = text_dim if text_dim is not None else pre.get("text_dim", 64)
+    ts_cols = pre.get("ts_cols", DEFAULT_TS_COLS)
+    table_cols = pre.get("table_cols", DEFAULT_TABLE_COLS)
     data_config = {
         "data_path": config["data_path"],
         "ticker2idx": config["ticker2idx"],
-        "test_train_split": config.get("test_train_split", 0.2),
-        "random_seed": config.get("random_seed", 42),
+        "test_train_split": pre.get("test_train_split", config.get("test_train_split", 0.2)),
+        "random_seed": pre.get("random_seed", config.get("random_seed", 42)),
     }
     train_dl, test_dl = getTrainTestDataLoader(data_config)
 
@@ -146,7 +159,11 @@ def build_tabnet_features(
             for idx in range(start, end):
                 sample = dataloader[idx]
                 X, y, meta = _sample_to_vector(
-                    sample, text_encoder=text_encoder, text_dim=text_dim
+                    sample,
+                    text_encoder=text_encoder,
+                    text_dim=text_dim,
+                    ts_cols=ts_cols,
+                    table_cols=table_cols,
                 )
                 if np.isnan(y).all():
                     continue
@@ -175,18 +192,17 @@ def build_tabnet_features(
     return X_train, y_train, X_test, y_test, meta_train, meta_test
 
 if __name__ == "__main__":
-    import os
-    from src.utils import read_json_file, read_yaml
-
-    config = read_yaml("config/config.yaml")
+    from pathlib import Path
+    project_root = Path(__file__).resolve().parents[2]
+    config = read_yaml(str(project_root / "config" / "config.yaml"))
+    tabnet_config = read_yaml(str(project_root / "config" / "tabnet_config.yaml"))
     ticker2idx = read_json_file(
         os.path.join(config["BASELINE_DATA_PATH"], config["TICKER2IDX"])
     )
     data_config = {
         "data_path": config["BASELINE_DATA_PATH"],
         "ticker2idx": ticker2idx,
-        "test_train_split": 0.2,
-        "random_seed": 42,
+        **tabnet_config.get("preprocessing", {}),
     }
     X_train, y_train, X_test, y_test, meta_train, meta_test = build_tabnet_features(
         data_config
