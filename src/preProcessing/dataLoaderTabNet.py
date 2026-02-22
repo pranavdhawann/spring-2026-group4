@@ -6,8 +6,6 @@ from tqdm import tqdm
 
 from src.dataLoader import getTrainTestDataLoader
 from src.utils import read_json_file, read_yaml, set_seed
-
-# Defaults (overridden by config/tabnet_config.yaml)
 DEFAULT_TS_COLS = [
     "open", "high", "low", "close", "volume", "dividends", "stock splits"
 ]

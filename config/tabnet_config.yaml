@@ -1,11 +1,8 @@
 # TabNet Baseline Configuration
-# =============================
 
 experiment_path: "experiments/baseline/baseline_results_tabnet"
 
-# Preprocessing (feature building from JSONL)
 preprocessing:
-  # Time series columns from baseline JSONL (lowercase keys)
   ts_cols:
     - open
     - high
@@ -14,7 +11,7 @@ preprocessing:
     - volume
     - dividends
     - stock splits
-  # Table/financial columns (last row used per sample)
+
   table_cols:
     - us-gaap_Assets
     - us-gaap_AssetsCurrent
@@ -23,6 +20,7 @@ preprocessing:
     - us-gaap_StockholdersEquity
     - us-gaap_NetCashProvidedByUsedInOperatingActivities
     - us-gaap_RetainedEarningsAccumulatedDeficit
+
   text_dim: 64
   feature_batch_size: 5000
   test_train_split: 0.2

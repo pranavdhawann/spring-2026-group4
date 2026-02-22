@@ -14,7 +14,6 @@ except ImportError:
 
 
 class TabNetForecasting:
-    """TabNet regressor for multi-step forecasting. All params from config (tabnet_config.yaml)."""
 
     def __init__(self, config: Dict):
         if not _TABNET_AVAILABLE:
