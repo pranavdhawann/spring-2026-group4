@@ -53,6 +53,7 @@ def tokenize_sentences(sentences, tokenizer, config, verbose=False):
         "truncation": True,
         "max_length": 512,
         "local_files_only": True,
+        "news_stride": 512 // 2,
     }
     if config:
         default_config.update(config)
@@ -65,6 +66,8 @@ def tokenize_sentences(sentences, tokenizer, config, verbose=False):
         max_length=cfg["max_length"],
         return_tensors=cfg["return_tensors"],
         local_files_only=cfg["local_files_only"],
+        stride=cfg["news_stride"],
+        return_overflowing_tokens=True,
     )
     if verbose:
         ("Time to process Tokenizer: ", time.time() - st_)

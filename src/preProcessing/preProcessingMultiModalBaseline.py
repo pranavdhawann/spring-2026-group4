@@ -16,10 +16,11 @@ class MultiModalPreProcessing(object):
             "language": "en",
             "tokenizer_path": "ProsusAI/finbert",
             "padding": False,
-            "truncation": False,
+            "truncation": True,
             "max_length": 512,
             "local_files_only": True,
             "return_tensors": None,
+            "news_stride": 512 // 2,
         }
         self.config.update(collator_cfg)
         self.tokenizer = AutoTokenizer.from_pretrained(
