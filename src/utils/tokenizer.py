@@ -63,7 +63,7 @@ def tokenize_sentences(sentences, tokenizer, config, verbose=False):
         padding=cfg["padding"],
         truncation=cfg["truncation"],
         max_length=cfg["max_length"],
-        return_tensors="pt",
+        return_tensors=cfg["return_tensors"],
         local_files_only=cfg["local_files_only"],
     )
     if verbose:
