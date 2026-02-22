@@ -16,8 +16,6 @@ def preprocessFinbertMMBaseline(articles, dates, tokenizer, config, verbose=Fals
         news_texts.append(day_article)
 
     _, inputs = tokenize_sentences(news_texts, tokenizer, config=config, verbose=False)
-    print(">>>", len(inputs["input_ids"]))
-    print("+++", len(inputs["input_ids"][0]))
 
     if verbose:
         print(" Time to pre process : ", time.time() - st_)
