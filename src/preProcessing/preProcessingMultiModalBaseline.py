@@ -4,6 +4,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from .preProcessMultiModalFinBert import preprocessFinbertMMBaseline
+from .preProcessMultiModalTcn import preprocessTCNMMBaseline
 
 
 class MultiModalPreProcessing(object):
@@ -38,7 +39,7 @@ class MultiModalPreProcessing(object):
         for b in batch:  # to process each elements in a batch
             dates_ = b["dates"]  # (1,Input_window_size)
             articles_ = b["articles"]
-            # time_series_ = b["time_series"]   # use these variables for pre processing
+            time_series_ = b["time_series"]
             # table_data_ = b["table_data"]
             sector_ = b["sector"]
             target_ = b["target"]
@@ -48,7 +49,11 @@ class MultiModalPreProcessing(object):
             pre_processed_articles = preprocessFinbertMMBaseline(
                 articles_, dates_, self.tokenizer, self.config
             )
-            # pre_processed_time_sereies =  # implement here and
+
+
+            pre_processed_time_series = preprocessTCNMMBaseline(
+                time_series_, dates_, self.config, verbose=False
+            )
 
             X_ = {
                 "tokenized_news_": pre_processed_articles[
@@ -57,6 +62,7 @@ class MultiModalPreProcessing(object):
                 "attention_mask_news_": pre_processed_articles[
                     1
                 ],  # (Input_window_size, article_len)
+                "time_series_features_": pre_processed_time_series[0],
                 "ticker_text_": ticker_text_,
                 "ticker_id_": ticker_id_,
                 "sector_": sector_,
