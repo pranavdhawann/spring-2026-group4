@@ -1,6 +1,7 @@
 from .metrics_utils import calculate_regression_metrics, print_metrics
 from .utils import (
     filter_timeseries_by_date,
+    get_sector2Idx,
     load_stock_csv,
     read_json_file,
     read_jsonl,
@@ -21,4 +22,5 @@ __all__ = [
     "calculate_regression_metrics",
     "print_metrics",
     "set_seed",
+    "get_sector2Idx",
 ]

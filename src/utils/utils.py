@@ -136,3 +136,14 @@ def filter_timeseries_by_date(
         df_filtered = df_filtered[df_filtered[date_col] <= end_date]
 
     return df_filtered
+
+
+def get_sector2Idx(data_dict_path):
+    df = pd.read_csv(data_dict_path)
+    sectors = df["Sector"].dropna().unique()
+    sectors = sorted(sectors)
+    sector2idx = {"NA": 0}
+    for idx, sector in enumerate(sectors, start=1):
+        sector2idx[sector] = idx
+
+    return sector2idx
