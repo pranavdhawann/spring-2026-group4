@@ -187,7 +187,7 @@ def preprocess_for_tcn(train_dataset, test_dataset, config, verbose=False):
 
 if __name__ == "__main__":
     import os
-    from src.dataLoader.dataLoaderBaseline import getTrainTestDataLoader
+    from src.dataLoader import getTrainTestDataLoader
     from src.utils import read_json_file, read_yaml
 
     print("Loading configs...")

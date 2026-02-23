@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-from src.dataLoader.dataLoaderBaseline import getTrainTestDataLoader
+from src.dataLoader import getTrainTestDataLoader
 from src.models.tcn_model import TCNModel
 from src.preProcessing.tcn_baseline_preprocessing import preprocess_for_tcn
 from src.utils import read_json_file, read_yaml, set_seed
