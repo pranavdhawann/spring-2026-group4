@@ -82,6 +82,8 @@ class MultiModalPreProcessing(object):
             mean, std, closes = self._standardize_list_np(closes)
             targets = self._replace_none_with_avg_np(target_)
             _, _, targets = self._standardize_list_np(targets, mean, std)
+            X_["mean_closes_"] = mean
+            X_["std_closes_"] = std
 
             X.append(X_)
             y.append(targets)
@@ -186,5 +188,9 @@ if __name__ == "__main__":
         print("time series : ", len(X[0]["time_series_features_"]))
         print("time series features len : ", len(X[0]["time_series_features_"][0]))
         print("time series : ", X[0]["time_series_features_"][0])
+
+        print("target : ", len(y))
+        print("target len : ", len(y[0]))
+        print("target[0] : ", y[0])
 
         break
