@@ -87,6 +87,7 @@ class MultiModalStockPredictor(nn.Module):
 
         pretrained_finbert_path = config.get("bert_path", "ProsusAI/finbert")
         local_files_only = config.get("local_files_only", True)
+        self.verbose = config.get("verbose", False)
 
         finbert_config = AutoConfig.from_pretrained(
             pretrained_finbert_path, local_files_only=local_files_only
@@ -148,8 +149,10 @@ class MultiModalStockPredictor(nn.Module):
         news_flat = tokenized_news_.reshape(-1, token_len)
         mask_flat = attention_mask_news_.reshape(-1, token_len)
 
-        print(f"news_flat shape: {news_flat.shape}")
-        print(f"mask_flat shape: {mask_flat.shape}")
+        if self.verbose:
+            print(f"news_flat shape: {news_flat.shape}")
+        if self.verbose:
+            print(f"mask_flat shape: {mask_flat.shape}")
 
         # with torch.no_grad():  # Freeze FinBERT to save memory
         news_out = self.finbert(input_ids=news_flat, attention_mask=mask_flat)
@@ -157,10 +160,12 @@ class MultiModalStockPredictor(nn.Module):
         news_features = news_out.last_hidden_state[
             :, 0, :
         ]  # (batch * num_articles, hidden)
-        print(f"news_features before reshape: {news_features.shape}")
+        if self.verbose:
+            print(f"news_features before reshape: {news_features.shape}")
 
         news_features = news_features.reshape(batch_size, num_articles, -1)
-        print(f"news_features after reshape: {news_features.shape}")
+        if self.verbose:
+            print(f"news_features after reshape: {news_features.shape}")
 
         if article_mask_ is not None:
             attn_out, _ = self.news_attention(
@@ -181,28 +186,35 @@ class MultiModalStockPredictor(nn.Module):
             )
             news_pooled = attn_out.mean(dim=1)
 
-        print(f"news_pooled shape: {news_pooled.shape}")
+        if self.verbose:
+            print(f"news_pooled shape: {news_pooled.shape}")
 
         #  time sereies changes
         ts_out, (h_n, _) = self.ts_encoder(time_series_features_)
         ts_features = ts_out[:, -1, :]
-        print(f"ts_features shape: {ts_features.shape}")
+        if self.verbose:
+            print(f"ts_features shape: {ts_features.shape}")
 
         ticker_features = self.ticker_embed(ticker_id_)  # (batch, 32)
         sector_features = self.sector_embed(sector_)  # (batch, 16)
-        print(f"ticker_features shape: {ticker_features.shape}")
-        print(f"sector_features shape: {sector_features.shape}")
+        if self.verbose:
+            print(f"ticker_features shape: {ticker_features.shape}")
+        if self.verbose:
+            print(f"sector_features shape: {sector_features.shape}")
 
         combined = torch.cat(
             [news_pooled, ts_features, ticker_features, sector_features], dim=-1
         )
-        print(f"combined shape: {combined.shape}")
+        if self.verbose:
+            print(f"combined shape: {combined.shape}")
 
         fused = self.fusion(combined)
-        print(f"fused shape: {fused.shape}")
+        if self.verbose:
+            print(f"fused shape: {fused.shape}")
 
         output = self.predictor(fused)  # (batch, 7)
-        print(f"output shape: {output.shape}")
+        if self.verbose:
+            print(f"output shape: {output.shape}")
 
         return output
 
@@ -338,7 +350,7 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             output = model(**model_inputs)
-
+        print(f"Batch {counter}")
         print("Input shapes:")
         print(f"  tokenized_news_: {model_inputs['tokenized_news_'].shape}")
         print(f"  attention_mask_news_: {model_inputs['attention_mask_news_'].shape}")
