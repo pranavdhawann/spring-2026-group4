@@ -52,5 +52,4 @@ training:
   virtual_batch_size: 128
   eval_metric: ["mae"]
 
-
 random_seed: 42
