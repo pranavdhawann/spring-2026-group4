@@ -4,6 +4,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from .preProcessMultiModalFinBert import preprocessFinbertMMBaseline
+from .preProcessMultiModalTcn import preprocessTCNMMBaseline
 
 
 class MultiModalPreProcessing(object):
@@ -38,18 +39,25 @@ class MultiModalPreProcessing(object):
         for b in batch:  # to process each elements in a batch
             dates_ = b["dates"]  # (1,Input_window_size)
             articles_ = b["articles"]
-            # time_series_ = b["time_series"]   # use these variables for pre processing
+            time_series_ = b["time_series"]
             # table_data_ = b["table_data"]
             sector_ = b["sector"]
             target_ = b["target"]
             ticker_text_ = b["ticker_text"]
             ticker_id_ = b["ticker_id"]
-
+            st_ = time.time()
             pre_processed_articles = preprocessFinbertMMBaseline(
                 articles_, dates_, self.tokenizer, self.config
             )
-            # pre_processed_time_sereies =  # implement here and
 
+            if verbose:
+                print("     Time to preprocess articles:", time.time() - st_)
+            st_ = time.time()
+            pre_processed_time_series = preprocessTCNMMBaseline(
+                time_series_, dates_, self.config, verbose=False
+            )
+            if verbose:
+                print("     Time to preprocess time_series:", time.time() - st_)
             X_ = {
                 "tokenized_news_": pre_processed_articles[
                     0
@@ -57,6 +65,7 @@ class MultiModalPreProcessing(object):
                 "attention_mask_news_": pre_processed_articles[
                     1
                 ],  # (Input_window_size, article_len)
+                "time_series_features_": pre_processed_time_series[0],
                 "ticker_text_": ticker_text_,
                 "ticker_id_": ticker_id_,
                 "sector_": sector_,
@@ -172,4 +181,10 @@ if __name__ == "__main__":
     for X, y in train_loader:
         print("batch_size : ", len(X))
         print("each data has : ", X[0].keys())
+        print("article : ", len(X[0]["tokenized_news_"]))
+        print("token len : ", len(X[0]["tokenized_news_"][0]))
+        print("time series : ", len(X[0]["time_series_features_"]))
+        print("time series features len : ", len(X[0]["time_series_features_"][0]))
+        print("time series : ", X[0]["time_series_features_"][0])
+
         break
