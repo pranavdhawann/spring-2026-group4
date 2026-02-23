@@ -45,16 +45,19 @@ class MultiModalPreProcessing(object):
             target_ = b["target"]
             ticker_text_ = b["ticker_text"]
             ticker_id_ = b["ticker_id"]
-
+            st_ = time.time()
             pre_processed_articles = preprocessFinbertMMBaseline(
                 articles_, dates_, self.tokenizer, self.config
             )
 
-
+            if verbose:
+                print("     Time to preprocess articles:", time.time() - st_)
+            st_ = time.time()
             pre_processed_time_series = preprocessTCNMMBaseline(
                 time_series_, dates_, self.config, verbose=False
             )
-
+            if verbose:
+                print("     Time to preprocess time_series:", time.time() - st_)
             X_ = {
                 "tokenized_news_": pre_processed_articles[
                     0
@@ -178,4 +181,10 @@ if __name__ == "__main__":
     for X, y in train_loader:
         print("batch_size : ", len(X))
         print("each data has : ", X[0].keys())
+        print("article : ", len(X[0]["tokenized_news_"]))
+        print("token len : ", len(X[0]["tokenized_news_"][0]))
+        print("time series : ", len(X[0]["time_series_features_"]))
+        print("time series features len : ", len(X[0]["time_series_features_"][0]))
+        print("time series : ", X[0]["time_series_features_"][0])
+
         break
