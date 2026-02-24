@@ -84,6 +84,7 @@ class MultiModalPreProcessing(object):
             _, _, targets = self._standardize_list_np(targets, mean, std)
             X_["mean_closes_"] = mean
             X_["std_closes_"] = std
+            X_["closes_"] = closes  # (input_size,) standardized closes for model
 
             X.append(X_)
             y.append(targets)
