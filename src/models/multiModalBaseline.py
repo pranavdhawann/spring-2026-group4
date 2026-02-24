@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 from transformers import AutoConfig, AutoModel
+from src.models.TcnMultiModalBaseline import TCNEncoder
 
 
 def prepare_batch(X, y, device="cpu", max_articles=32, pad_token_id=0):
@@ -103,14 +104,13 @@ class MultiModalStockPredictor(nn.Module):
             embed_dim=self.finbert_hidden, num_heads=4, batch_first=True
         )
 
-        self.ts_encoder = nn.LSTM(  # < --change for time sereies
-            input_size=self.ts_features,
-            hidden_size=128,
-            num_layers=2,
-            batch_first=True,
-            bidirectional=True,
-            dropout=0.2,
-        )
+        self.ts_encoder = TCNEncoder({
+            'input_size': self.ts_features,
+            'num_channels': [64, 128, 256],
+            'kernel_size': 3,
+            'dropout': 0.2,
+            'embedding_size': 256,
+        })
 
         self.ticker_embed = (
             nn.Embedding(num_tickers, 32) if num_tickers else nn.Linear(768, 32)
@@ -189,9 +189,8 @@ class MultiModalStockPredictor(nn.Module):
         if self.verbose:
             print(f"news_pooled shape: {news_pooled.shape}")
 
-        #  time sereies changes
-        ts_out, (h_n, _) = self.ts_encoder(time_series_features_)
-        ts_features = ts_out[:, -1, :]
+        #time series
+        ts_features = self.ts_encoder(time_series_features_)  # (batch, 256)
         if self.verbose:
             print(f"ts_features shape: {ts_features.shape}")
 
