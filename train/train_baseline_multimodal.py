@@ -19,6 +19,8 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from src.dataLoader import getTrainTestDataLoader
+from src.preProcessing.preProcessingMultiModalBaseline import MultiModalPreProcessing
+from src.models import FinBertForecastingBL
 from src.utils import (
     calculate_regression_metrics,
     read_json_file,
@@ -42,6 +44,15 @@ def import_from_path(path: str):
         module_name, attr = path.rsplit(".", 1)
     module = importlib.import_module(module_name)
     return getattr(module, attr)
+
+
+def _resolve_class(value: Any, default_class: type) -> type:
+    """Use default class if value is None; else use value if it's a class, else import from string path."""
+    if value is None:
+        return default_class
+    if isinstance(value, type):
+        return value
+    return import_from_path(str(value))
 
 
 def _to_tensor(v: Any, *, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
@@ -140,8 +151,7 @@ def build_batch_adapter(config: Mapping[str, Any]) -> Callable[[Any, torch.devic
     raise ValueError(f"Unknown batch_adapter: {adapter}")
 
 def build_model(config: Mapping[str, Any], device: torch.device) -> nn.Module:
-    model_class = config.get("model_class", "src.models:FinBertForecastingBL")
-    ModelCls = import_from_path(str(model_class)) if isinstance(model_class, str) else model_class
+    ModelCls = _resolve_class(config.get("model_class"), FinBertForecastingBL)
     model_cfg = copy.deepcopy(dict(config))
     model_cfg["device"] = device
     model = ModelCls(model_cfg)
@@ -277,9 +287,9 @@ def train(train_config: Optional[Mapping[str, Any]] = None):
         "freeze_bert": False,
         "max_window_size": 14,
         "use_torch_compile": False,
-        # Generalization knobs
-        "collator_class": "src.preProcessing.preProcessingMultiModalBaseline:MultiModalPreProcessing",
-        "model_class": "src.models:FinBertForecastingBL",
+        # Generalization knobs (None = use imported defaults; or pass class/string path)
+        "collator_class": None,
+        "model_class": None,
         "batch_adapter": "finbert_mm",
         "include_time_series_features": False,
         "model_forward": "auto",
@@ -324,7 +334,7 @@ def train(train_config: Optional[Mapping[str, Any]] = None):
         test_dataloader, fraction=config["sample_fraction"]
     )
 
-    CollatorCls = import_from_path(str(config.get("collator_class")))
+    CollatorCls = _resolve_class(config.get("collator_class"), MultiModalPreProcessing)
     collator = CollatorCls(config)
     train_loader = DataLoader(
         train_dataloader,
