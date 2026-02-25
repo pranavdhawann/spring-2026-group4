@@ -235,7 +235,7 @@ if __name__ == "__main__":
     # Configuration
     config = {
         "yaml_config_path": "config/config.yaml",
-        "experiment_path": "experiments/baseline/multiModal",
+        "experiment_path": "experiments/baseline/multimodal",
         "load_pre_trained": False,
         "batch_size": 32,
         "max_length": 512,
@@ -352,6 +352,7 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             output = model(**model_inputs)
+            print(output)
         print(f"Batch {counter}")
         print("Input shapes:")
         print(f"  tokenized_news_: {model_inputs['tokenized_news_'].shape}")
