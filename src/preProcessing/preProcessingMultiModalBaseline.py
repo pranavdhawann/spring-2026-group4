@@ -8,7 +8,8 @@ from .preProcessMultiModalTcn import preprocessTCNMMBaseline
 
 
 class MultiModalPreProcessing(object):
-    def __init__(self, collator_cfg):
+    def __init__(self, collator_cfg, tcn_scaler=None):
+        self.tcn_scaler = tcn_scaler
         self.config = {
             "lowercase": True,
             "remove_punctuation": True,
@@ -28,6 +29,52 @@ class MultiModalPreProcessing(object):
             self.config["tokenizer_path"],
             local_files_only=self.config["local_files_only"],
         )
+
+        # Attempt to load or compute global TCN scaler automatically
+        if self.tcn_scaler is None and "experiment_path" in self.config:
+            import os
+            import pickle
+
+            scaler_path = os.path.join(self.config["experiment_path"], "tcn_scaler.pkl")
+            if os.path.exists(scaler_path):
+                with open(scaler_path, "rb") as f:
+                    self.tcn_scaler = pickle.load(f)
+                print("MultiModalPreProcessing: Global TCN Scaler loaded from disk.")
+            else:
+                dl_path = os.path.join(
+                    self.config["experiment_path"], "dataloaders.pkl"
+                )
+                if os.path.exists(dl_path):
+                    print(
+                        "MultiModalPreProcessing: Computing global TCN Scaler from dataloaders.pkl..."
+                    )
+                    with open(dl_path, "rb") as f:
+                        dataloaders = pickle.load(f)
+
+                    if "train" in dataloaders:
+                        train_dataloader = dataloaders["train"]
+                        from sklearn.preprocessing import StandardScaler
+                        from tqdm import tqdm
+
+                        scaler = StandardScaler()
+                        for sample in tqdm(
+                            train_dataloader, desc="Fitting Scaler in Collator"
+                        ):
+                            # We can reuse the existing preprocessing logic dynamically without scaling it yet
+                            raw_ts = preprocessTCNMMBaseline(
+                                sample["time_series"],
+                                sample["dates"],
+                                self.config,
+                                verbose=False,
+                            )[0]
+                            scaler.partial_fit(raw_ts)
+
+                        self.tcn_scaler = scaler
+                        with open(scaler_path, "wb") as f:
+                            pickle.dump(scaler, f)
+                        print(
+                            "MultiModalPreProcessing: Global TCN Scaler computed and saved!"
+                        )
 
     def __call__(self, batch):
         return self._preprocess(batch)
@@ -58,6 +105,13 @@ class MultiModalPreProcessing(object):
             )
             if verbose:
                 print("     Time to preprocess time_series:", time.time() - st_)
+
+            raw_ts_features = pre_processed_time_series[0]
+            if self.tcn_scaler is not None:
+                scaled_ts_features = self.tcn_scaler.transform(raw_ts_features)
+            else:
+                scaled_ts_features = raw_ts_features
+
             X_ = {
                 "tokenized_news_": pre_processed_articles[
                     0
@@ -65,7 +119,7 @@ class MultiModalPreProcessing(object):
                 "attention_mask_news_": pre_processed_articles[
                     1
                 ],  # (Input_window_size, article_len)
-                "time_series_features_": pre_processed_time_series[0],
+                "time_series_features_": scaled_ts_features,
                 "ticker_text_": ticker_text_,
                 "ticker_id_": ticker_id_,
                 "sector_": sector_,
@@ -74,9 +128,11 @@ class MultiModalPreProcessing(object):
             # pre process targets
             closes = []
             for day in range(input_size):
-                ts_close = (
-                    b["time_series"][day]["close"] if b["time_series"][day] else np.nan
-                )
+                try:
+                    day_data = b["time_series"][day]
+                    ts_close = day_data.get("close", np.nan) if day_data else np.nan
+                except IndexError:
+                    ts_close = np.nan
                 closes.append(ts_close)
             closes = self._replace_none_with_avg_np(closes)
             mean, std, closes = self._standardize_list_np(closes)

@@ -2,28 +2,20 @@
     "yaml_config_path": "config/config.yaml",
     "experiment_path": "experiments/baseline/multimodal",
     "load_pre_trained": false,
-    "epochs": 1,
-    "batch_size": 2,
+    "epochs": 5,
+    "batch_size": 1,
     "max_length": 512,
-    "lr": {
-        "bert": 1e-05,
-        "mlp": 0.001
-    },
+    "lr": 0.0001,
     "bert_path": "ProsusAI/finbert",
     "local_files_only": true,
-    "sample_fraction": 0.001,
+    "sample_fraction": 0.01,
     "patience": 5,
-    "number_of_epochs_ran": 0,
+    "number_of_epochs_ran": 4,
     "y_true_vs_y_pred_max_points": 5000,
     "rand_seed": 42,
     "verbose": false,
     "scheduled_sampling": "linear",
-    "mlp_hidden_dims": [
-        128,
-        64
-    ],
     "news_embedding_dim": 256,
-    "freeze_bert": false,
     "max_window_size": 14,
     "num_articles": 18,
     "time_series_features": 12,
@@ -280,6 +272,6 @@
         "VTV": 233
     },
     "test_train_split": 0.2,
-    "train_samples": 168,
-    "test_samples": 42
+    "train_samples": 1674,
+    "test_samples": 419
 }
