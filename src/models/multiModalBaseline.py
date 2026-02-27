@@ -82,7 +82,7 @@ class MultiModalStockPredictor(nn.Module):
 
         self.config = config
         self.max_articles = config.get(
-            "max_articles", 32
+            "num_articles", 32
         )  # Maximum articles to consider
         self.time_steps = config.get("max_window_size", 14)
         self.ts_features = config.get("time_series_features", 12)

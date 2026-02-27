@@ -4,6 +4,7 @@ Script to train FinBert model
 
 """
 import copy
+import gc
 import json
 import math
 import os
@@ -31,6 +32,14 @@ from src.utils import (
 )
 
 scaler = GradScaler()  # for stable mixed precision
+
+
+torch.cuda.empty_cache()
+gc.collect()
+
+# Verify memory is cleared
+print(f"Memory allocated: {torch.cuda.memory_allocated(0)/1024**2:.2f} MB")
+print(f"Memory cached: {torch.cuda.memory_reserved(0)/1024**2:.2f} MB")
 
 
 def prepare_batch(X, y, device="cpu", max_articles=32, pad_token_id=0, sector2idx=None):
@@ -170,13 +179,13 @@ def train(train_config):
         "yaml_config_path": "config/config.yaml",
         "experiment_path": "experiments/baseline/multimodal",
         "load_pre_trained": False,
-        "epochs": 5,
-        "batch_size": 1,
+        "epochs": 100,
+        "batch_size": 12,
         "max_length": 512,
         "lr": 1e-4,
         "bert_path": "ProsusAI/finbert",
         "local_files_only": True,
-        "sample_fraction": 0.01,
+        "sample_fraction": 1,
         "patience": 5,
         "number_of_epochs_ran": 0,
         "y_true_vs_y_pred_max_points": 5000,
@@ -185,13 +194,16 @@ def train(train_config):
         "scheduled_sampling": "linear",
         "news_embedding_dim": 256,
         "max_window_size": 14,
-        "num_articles": 18,
+        "num_articles": 4,
         "time_series_features": 12,
     }
     if not os.path.exists(config["experiment_path"]):
         os.mkdir(os.path.join(config["experiment_path"]))
     config.update(train_config)
     set_seed(config["rand_seed"])
+    torch.backends.cudnn.benchmark = True
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.allow_tf32 = True
 
     yaml_config = read_yaml(config["yaml_config_path"])
     config.update(yaml_config)
@@ -239,7 +251,7 @@ def train(train_config):
         collate_fn=collator,
         batch_size=config["batch_size"],
         shuffle=True,
-        num_workers=4,
+        num_workers=3,
         pin_memory=True,
         persistent_workers=True,
         prefetch_factor=2,
@@ -249,7 +261,7 @@ def train(train_config):
         collate_fn=collator,
         batch_size=config["batch_size"],
         shuffle=False,
-        num_workers=4,
+        num_workers=3,
         pin_memory=True,
         persistent_workers=True,
         prefetch_factor=2,
@@ -262,12 +274,12 @@ def train(train_config):
 
     if config["load_pre_trained"]:
         model_path = os.path.join(config["experiment_path"], "best_model.pth")
-        model = torch.compile(model)
+        model = torch.compile(model, mode="max-autotune")
         model.load_state_dict(torch.load(model_path, map_location=device))
         print(" Loaded Pre Trained Model")
     else:
         model.to(device)
-        model = torch.compile(model)
+        model = torch.compile(model, mode="max-autotune")
 
     criterion = nn.MSELoss()
     optimizer = torch.optim.AdamW(
@@ -304,8 +316,11 @@ def train(train_config):
 
             if config["verbose"]:
                 print("     time taken to convert to tensor: ", time.time() - st_)
+                print("+++++++++++++++++++++ X ++++++++++++++++++++++")
+                print(model_inputs)
+                print("[y] :: ", y)
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             st_ = time.time()
             y_ = model(**model_inputs)
