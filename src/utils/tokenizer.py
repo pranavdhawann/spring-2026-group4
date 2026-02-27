@@ -52,6 +52,7 @@ def tokenize_sentences(sentences, tokenizer, config, verbose=False):
         "padding": "max_length",
         "truncation": True,
         "max_length": 512,
+        "return_tensors": None,
         "local_files_only": True,
         "news_stride": 512 // 2,
     }
@@ -65,12 +66,11 @@ def tokenize_sentences(sentences, tokenizer, config, verbose=False):
         truncation=cfg["truncation"],
         max_length=cfg["max_length"],
         return_tensors=cfg["return_tensors"],
-        local_files_only=cfg["local_files_only"],
         stride=cfg["news_stride"],
         return_overflowing_tokens=True,
     )
     if verbose:
-        ("Time to process Tokenizer: ", time.time() - st_)
+        print("Time to process Tokenizer: ", time.time() - st_)
     return cleaned_texts, inputs
 
 

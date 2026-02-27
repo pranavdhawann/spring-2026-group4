@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 
-def calculate_bollinger_bands(prices, window=20, num_std=2.0):
+def calculate_bollinger_bands(prices, window=10, num_std=2.0):
     # BOLLINGER BANDS
     middle_band = prices.rolling(window=window).mean()
     std = prices.rolling(window=window).std()
@@ -15,7 +15,7 @@ def calculate_bollinger_bands(prices, window=20, num_std=2.0):
     return upper_band, middle_band, lower_band
 
 
-def calculate_rsi(prices, window=14):
+def calculate_rsi(prices, window=7):
     # rsi
     delta = prices.diff()
     gains = delta.clip(lower=0)
@@ -57,9 +57,9 @@ def preprocessTCNMMBaseline(time_series, dates, config, verbose=False):
 
     features_df = pd.DataFrame(rows)
 
-    if calculate_indicators:
-        close_prices = features_df["close"]
+    close_prices = features_df["close"]
 
+    if calculate_indicators:
         # Bollinger Bands
         bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(close_prices)
         features_df["bb_upper"] = bb_upper.values

@@ -1,6 +1,7 @@
 import time
 
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 from transformers import AutoTokenizer
 
 from .preProcessMultiModalFinBert import preprocessFinbertMMBaseline
@@ -58,6 +59,11 @@ class MultiModalPreProcessing(object):
             )
             if verbose:
                 print("     Time to preprocess time_series:", time.time() - st_)
+
+            raw_ts_features = pre_processed_time_series[0]
+            _scaler = StandardScaler()
+            scaled_ts_features = _scaler.fit_transform(raw_ts_features)
+
             X_ = {
                 "tokenized_news_": pre_processed_articles[
                     0
@@ -65,7 +71,7 @@ class MultiModalPreProcessing(object):
                 "attention_mask_news_": pre_processed_articles[
                     1
                 ],  # (Input_window_size, article_len)
-                "time_series_features_": pre_processed_time_series[0],
+                "time_series_features_": scaled_ts_features,
                 "ticker_text_": ticker_text_,
                 "ticker_id_": ticker_id_,
                 "sector_": sector_,
@@ -74,9 +80,11 @@ class MultiModalPreProcessing(object):
             # pre process targets
             closes = []
             for day in range(input_size):
-                ts_close = (
-                    b["time_series"][day]["close"] if b["time_series"][day] else np.nan
-                )
+                try:
+                    day_data = b["time_series"][day]
+                    ts_close = day_data.get("close", np.nan) if day_data else np.nan
+                except IndexError:
+                    ts_close = np.nan
                 closes.append(ts_close)
             closes = self._replace_none_with_avg_np(closes)
             mean, std, closes = self._standardize_list_np(closes)
@@ -84,6 +92,7 @@ class MultiModalPreProcessing(object):
             _, _, targets = self._standardize_list_np(targets, mean, std)
             X_["mean_closes_"] = mean
             X_["std_closes_"] = std
+            X_["closes_"] = closes  # (input_size,) standardized closes for model
 
             X.append(X_)
             y.append(targets)

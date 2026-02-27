@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import torch
 import torch.nn as nn
 from transformers import AutoConfig, AutoModel
+
 from src.models.TcnMultiModalBaseline import TCNEncoder
 
 
@@ -81,7 +82,7 @@ class MultiModalStockPredictor(nn.Module):
 
         self.config = config
         self.max_articles = config.get(
-            "max_articles", 32
+            "num_articles", 32
         )  # Maximum articles to consider
         self.time_steps = config.get("max_window_size", 14)
         self.ts_features = config.get("time_series_features", 12)
@@ -104,13 +105,15 @@ class MultiModalStockPredictor(nn.Module):
             embed_dim=self.finbert_hidden, num_heads=4, batch_first=True
         )
 
-        self.ts_encoder = TCNEncoder({
-            'input_size': self.ts_features,
-            'num_channels': [64, 128, 256],
-            'kernel_size': 3,
-            'dropout': 0.2,
-            'embedding_size': 256,
-        })
+        self.ts_encoder = TCNEncoder(
+            {
+                "input_size": self.ts_features,
+                "num_channels": [64, 128, 256],
+                "kernel_size": 3,
+                "dropout": 0.2,
+                "embedding_size": 256,
+            }
+        )
 
         self.ticker_embed = (
             nn.Embedding(num_tickers, 32) if num_tickers else nn.Linear(768, 32)
@@ -189,7 +192,7 @@ class MultiModalStockPredictor(nn.Module):
         if self.verbose:
             print(f"news_pooled shape: {news_pooled.shape}")
 
-        #time series
+        # time series
         ts_features = self.ts_encoder(time_series_features_)  # (batch, 256)
         if self.verbose:
             print(f"ts_features shape: {ts_features.shape}")
@@ -232,7 +235,7 @@ if __name__ == "__main__":
     # Configuration
     config = {
         "yaml_config_path": "config/config.yaml",
-        "experiment_path": "experiments/baseline/multiModal",
+        "experiment_path": "experiments/baseline/multimodal",
         "load_pre_trained": False,
         "batch_size": 32,
         "max_length": 512,
@@ -349,6 +352,7 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             output = model(**model_inputs)
+            print(output)
         print(f"Batch {counter}")
         print("Input shapes:")
         print(f"  tokenized_news_: {model_inputs['tokenized_news_'].shape}")
