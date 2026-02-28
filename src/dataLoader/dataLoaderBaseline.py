@@ -63,7 +63,12 @@ def _remove_data_with_no_news(data):
 
 
 def _test_train_split(data, config):
-    random.shuffle(data)
+    # Chronological split: sort by (ticker_file, line_index) so that
+    # earlier windows go to train and later windows go to test.
+    # line_index within each JSONL file corresponds to chronological order
+    # (sliding windows are written earliest-first during dataset creation).
+    # This prevents data leakage from overlapping stride-2 windows.
+    data.sort(key=lambda x: (x[0], x[1]))  # (jsonl_path, line_idx)
     split_idx = int(len(data) * (1 - config["test_train_split"]))
     train_data = data[:split_idx]
     test_data = data[split_idx:]

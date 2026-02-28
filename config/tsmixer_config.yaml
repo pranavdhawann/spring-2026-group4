@@ -1,0 +1,50 @@
+# TSMixer Configuration (V2 - after audit fixes)
+
+experiment_path: 'experiments/baseline/baseline_results_tsmixer'
+
+# Model architecture
+model:
+  input_size: 23          # 5 OHLCV + 18 derived features
+  output_size: 7           # 7-day forecast horizon
+  seq_len: 14              # 14-day history window
+  d_model: 128             # Feature projection dimension
+  d_ff: 256                # Feed-forward expansion for feature-mixing
+  d_ff_time: 56            # Feed-forward expansion for time-mixing (4x seq_len)
+  num_blocks: 4            # Number of mixer blocks
+  dropout: 0.1             # Dropout rate
+  output_strategy: 'temporal_proj'  # V2: was 'flatten' - preserves temporal structure
+
+# Training
+training:
+  epochs: 30
+  batch_size: 64
+  learning_rate: 0.001
+  patience: 10
+  sample_fraction: 1.0
+  gradient_clip_val: 1.0
+  weight_decay: 0.0001
+  lr_scheduler: 'reduce_on_plateau'
+  lr_patience: 5
+  lr_factor: 0.5
+  loss_function: 'mse_plus_diff'   # 'mse' or 'mse_plus_diff'
+  diff_loss_weight: 0.3            # V2: was 0.7 - balance shape vs level
+  variance_loss_weight: 0.1        # V2: new - anti-flatness penalty
+  val_ratio: 0.15                  # V2: new - validation split from training data
+
+# Preprocessing
+preprocessing:
+  features:
+    - open
+    - high
+    - low
+    - close
+    - volume
+  calculate_indicators: true
+  standardization: 'zscore'
+  target_type: 'pct_change'
+  per_sample_ohlcv_norm: true       # V2: new - per-sample OHLCV normalization
+
+# Evaluation
+evaluation:
+  num_plots: 10
+  max_scatter_points: 5000

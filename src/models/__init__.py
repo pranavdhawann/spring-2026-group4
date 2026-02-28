@@ -4,6 +4,7 @@ from .multiModalBaseline import MultiModalStockPredictor
 from .tcn_model import TCNModel
 from .TcnMultiModalBaseline import TCNEncoder
 from .timeseries_lstm import LSTMForecaster
+from .tsmixer_model import TSMixerModel
 
 __all__ = [
     "FinBERTModel",
@@ -12,4 +13,5 @@ __all__ = [
     "MultiModalStockPredictor",
     "TCNModel",
     "TCNEncoder",
+    "TSMixerModel",
 ]
