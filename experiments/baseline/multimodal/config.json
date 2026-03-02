@@ -10,7 +10,7 @@
     "local_files_only": true,
     "sample_fraction": 1,
     "patience": 5,
-    "number_of_epochs_ran": 11,
+    "number_of_epochs_ran": 18,
     "y_true_vs_y_pred_max_points": 5000,
     "rand_seed": 42,
     "verbose": false,
