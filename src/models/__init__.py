@@ -4,6 +4,8 @@ from .multiModalBaseline import MultiModalStockPredictor
 from .tcn_model import TCNModel
 from .TcnMultiModalBaseline import TCNEncoder
 from .timeseries_lstm import LSTMForecaster
+from .tabnetForecastingBaseline import tabet_forcasting
+from .multiModalTabNetTCN import TabNetTCNMultiModal
 
 __all__ = [
     "FinBERTModel",
@@ -12,4 +14,6 @@ __all__ = [
     "MultiModalStockPredictor",
     "TCNModel",
     "TCNEncoder",
+    "tabet_forcasting",
+    "TabNetTCNMultiModal",
 ]
