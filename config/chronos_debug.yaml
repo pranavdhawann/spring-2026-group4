@@ -1,0 +1,51 @@
+# Chronos-2 Debug Configuration
+# ============================
+# Identical structure to chronos_baseline.yaml, but with significantly 
+# reduced sizes to allow for fast iterations and testing.
+
+# Base model architecture
+model_name: "amazon/chronos-2-large"
+context_length: 512
+prediction_length: 7
+stride: 1
+target_col: "Close"
+
+# Data source
+data_dir: "data"
+manifest_path: "data/chronos_filtered_manifest.json"
+ticker_limit: 10                          # <--- OVERRIDE: Only read 10 tickers from the manifest for fast start
+
+# Training Hyperparameters
+learning_rate: 1.0e-4
+num_epochs: 2                             # <--- OVERRIDE: Run just 2 epochs
+per_device_train_batch_size: 2            # <--- OVERRIDE: Small batch size
+gradient_accumulation_steps: 8
+warmup_ratio: 0.1
+weight_decay: 0.01
+lr_scheduler_type: "cosine"
+fp16: true
+
+# LoRA (Low-Rank Adaptation) settings
+lora_rank: 16
+lora_alpha: 32
+lora_target_modules:
+  - "q"
+  - "k"
+  - "v"
+  - "o"
+  - "wi_0"
+  - "wi_1"
+  - "wo"
+lora_dropout: 0.05
+
+# Logging & Evaluation 
+logging_steps: 2                          # <--- OVERRIDE: Log frequently
+save_steps: 10                            # <--- OVERRIDE: Save frequently 
+eval_steps: 10                            # <--- OVERRIDE: Eval frequently
+num_samples_for_eval: 5                   # <--- OVERRIDE: Minimal eval sampling
+
+# Output strategy
+output_dir: "experiments/baseline/chronos_debug"  # Save debug experiments separately
+
+# Reproducibility
+seed: 42
