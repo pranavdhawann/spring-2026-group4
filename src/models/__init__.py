@@ -6,6 +6,7 @@ from .TcnMultiModalBaseline import TCNEncoder
 from .timeseries_lstm import LSTMForecaster
 from .tabnetForecastingBaseline import tabet_forcasting
 from .multiModalTabNetTCN import TabNetTCNMultiModal
+from .hardVotingEnsemble import HardVotingEnsemble
 
 __all__ = [
     "FinBERTModel",
@@ -16,4 +17,5 @@ __all__ = [
     "TCNEncoder",
     "tabet_forcasting",
     "TabNetTCNMultiModal",
+    "HardVotingEnsemble",
 ]

@@ -12,7 +12,7 @@ class TemporalBlock(nn.Module):
 
         padding = (kernel_size - 1) * dilation
 
-        self.conv1 = nn.utils.weight_norm(
+        self.conv1 = nn.utils.parametrizations.weight_norm(
             nn.Conv1d(
                 in_channels,
                 out_channels,
@@ -22,7 +22,7 @@ class TemporalBlock(nn.Module):
             )
         )
 
-        self.conv2 = nn.utils.weight_norm(
+        self.conv2 = nn.utils.parametrizations.weight_norm(
             nn.Conv1d(
                 out_channels,
                 out_channels,

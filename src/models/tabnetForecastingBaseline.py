@@ -1,4 +1,7 @@
-from typing import Dict
+
+
+
+from typing import Dict, Literal, Optional
 
 import torch
 import torch.nn as nn
@@ -16,6 +19,9 @@ class tabet_forcasting(nn.Module):
         set_seed()
 
         self.config = {
+            # task: "regression" (7-day forecasting) or "classification" (next-day direction)
+            "task": "regression",
+            "num_classes": 2,  # only used when task == "classification"
             "finbert_name_or_path": "ProsusAI/finbert",
             "device": torch.device("cpu"),
             "local_files_only": True,
@@ -53,16 +59,23 @@ class tabet_forcasting(nn.Module):
             self.config["bert_hidden_dim"], self.config["news_embedding_dim"]
         )
 
-        # TabNet-style head on top of projected news + simple numeric features
+        # TabNet head (continuous-only: use TabNetNoEmbeddings to avoid EmbeddingGenerator).
         input_dim = self.config["news_embedding_dim"] + 3
 
-        # We rely on pytorch_tabnet for a clean implementation.
-        # If it is not installed, this import will raise, making the dependency explicit.
-        from pytorch_tabnet.tab_network import TabNet
+        from pytorch_tabnet.tab_network import TabNetNoEmbeddings
 
-        self.tabnet = TabNet(
+        task: Literal["regression", "classification"] = self.config.get(
+            "task", "regression"
+        )
+        if task == "classification":
+            # Binary by default: output a single logit. Use BCEWithLogitsLoss in training.
+            output_dim = 1
+        else:
+            output_dim = self.config["FORECAST_HORIZON"]
+
+        self.tabnet = TabNetNoEmbeddings(
             input_dim=input_dim,
-            output_dim=self.config["FORECAST_HORIZON"],
+            output_dim=output_dim,
             n_d=self.config["tabnet_n_d"],
             n_a=self.config["tabnet_n_a"],
             n_steps=self.config["tabnet_n_steps"],
@@ -121,8 +134,27 @@ class tabet_forcasting(nn.Module):
         projected_news = self.news_projection(news_embeddings)
         tabnet_input = torch.cat([projected_news, combined_features], dim=1)
 
-        predictions, _ = self.tabnet(tabnet_input)
-        return predictions
+        out, _ = self.tabnet(tabnet_input)
+        return out
+
+    @torch.no_grad()
+    def predict_proba(self, inputs) -> torch.Tensor:
+        """
+        For classification only: returns probabilities in [0,1] with shape (B,).
+        """
+        task = self.config.get("task", "regression")
+        if task != "classification":
+            raise ValueError("predict_proba is only valid when task='classification'")
+        logits = self.forward(inputs).view(-1)
+        return torch.sigmoid(logits)
+
+    @torch.no_grad()
+    def predict_label(self, inputs, threshold: float = 0.5) -> torch.Tensor:
+        """
+        For classification only: returns hard labels {0,1} with shape (B,).
+        """
+        probs = self.predict_proba(inputs)
+        return (probs >= threshold).long()
 
 
 __all__ = ["tabet_forcasting"]

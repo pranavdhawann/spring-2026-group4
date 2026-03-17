@@ -83,12 +83,13 @@ class TabNetTCNMultiModal(nn.Module):
         ticker_dim = 32 if num_tickers else 0
         sector_dim = 16 if num_sectors else 0
 
-        # TabNet head over concatenated features
+        # TabNet head over concatenated features (continuous-only: use TabNetNoEmbeddings
+        # to avoid EmbeddingGenerator and group_matrix issues).
         fused_dim = self.config["news_embedding_dim"] + 256 + ticker_dim + sector_dim
 
-        from pytorch_tabnet.tab_network import TabNet
+        from pytorch_tabnet.tab_network import TabNetNoEmbeddings
 
-        self.tabnet = TabNet(
+        self.tabnet = TabNetNoEmbeddings(
             input_dim=fused_dim,
             output_dim=128,
             n_d=self.config["tabnet_n_d"],
@@ -164,6 +165,14 @@ class TabNetTCNMultiModal(nn.Module):
             parts.append(self.sector_embed(sector_))  # (B, 16)
 
         fused = torch.cat(parts, dim=-1)  # (B, fused_dim)
+
+        # pytorch_tabnet encoder keeps group_attention_matrix on CPU; ensure same device as input
+        if hasattr(self.tabnet, "encoder") and hasattr(
+            self.tabnet.encoder, "group_attention_matrix"
+        ):
+            gm = self.tabnet.encoder.group_attention_matrix
+            if gm.device != fused.device:
+                self.tabnet.encoder.group_attention_matrix = gm.to(fused.device)
 
         tabnet_out, _ = self.tabnet(fused)  # (B, 128)
         output = self.predictor(tabnet_out)  # (B, FORECAST_HORIZON)

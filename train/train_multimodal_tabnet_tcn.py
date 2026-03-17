@@ -15,11 +15,14 @@ import pickle
 import random
 import time
 
+# Required for deterministic CuBLAS when deterministic algorithms are enabled
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler
+from torch.amp import GradScaler
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
@@ -34,7 +37,7 @@ from src.utils import (
     set_seed,
 )
 
-scaler = GradScaler()
+scaler = torch.amp.GradScaler("cuda")
 
 
 torch.cuda.empty_cache()
@@ -265,12 +268,19 @@ def train(train_config):
 
     if config["load_pre_trained"]:
         model_path = os.path.join(config["experiment_path"], "best_model.pth")
-        model = torch.compile(model, mode="max-autotune")
         model.load_state_dict(torch.load(model_path, map_location=device))
         print(" Loaded Pre Trained Model")
-    else:
-        model.to(device)
-        model = torch.compile(model, mode="max-autotune")
+
+    model.to(device)
+
+    # pytorch_tabnet TabNetEncoder keeps group_attention_matrix as a plain tensor
+    # (not a buffer), so it is not moved by .to(device). Move it explicitly.
+    if hasattr(model, "tabnet") and hasattr(model.tabnet, "encoder"):
+        enc = model.tabnet.encoder
+        if hasattr(enc, "group_attention_matrix") and isinstance(
+            enc.group_attention_matrix, torch.Tensor
+        ):
+            enc.group_attention_matrix = enc.group_attention_matrix.to(device)
 
     criterion = nn.MSELoss()
     optimizer = torch.optim.AdamW(
