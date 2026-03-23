@@ -176,7 +176,7 @@ def plot_batch_predictions(
     )
 
     ax.set_xlabel("Days", fontsize=12)
-    ax.set_ylabel("Stock Close Price", fontsize=12)
+    ax.set_ylabel("Stock Close Price (standardized )", fontsize=12)
     ax.set_title(f"Batch {batch_idx}: Stock Price Predictions", fontsize=14)
     ax.grid(True, alpha=0.3)
     ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8, ncol=1)
@@ -304,7 +304,7 @@ def predict(predict_config):
                         config["experiment_path"],
                         f"predict/batch_{batch_idx}_predictions.png",
                     ),
-                    num_stocks_to_plot=min(3, X_test["closes"].shape[0]),
+                    num_stocks_to_plot=1,  # min(3, X_test["closes"].shape[0]),
                 )
 
         config["test_samples"] = len(test_loader) * config["batch_size"]

@@ -47,6 +47,22 @@ class FinBertCollator:
         arr = (arr - mean) / std
         return mean, std, arr
 
+    @staticmethod
+    def _minmax_scale_list_np(arr, min_val=None, max_val=None):
+        arr = np.array(arr, dtype=np.float32)
+
+        if min_val is None:
+            min_val = arr.min()
+            max_val = arr.max()
+
+            # avoid division by zero
+            if max_val - min_val == 0:
+                max_val = min_val + 1.0
+
+        arr = (arr - min_val) / (max_val - min_val)
+
+        return min_val, max_val, arr
+
     def preprocess(self, batch, verbose=False):
         """
         Fast preprocessing for FinBERT Baseline
