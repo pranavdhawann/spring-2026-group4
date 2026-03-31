@@ -1,0 +1,36 @@
+evaluation:
+  # Number of future trading days to forecast
+  prediction_length: 5
+
+  # Quantile levels for probabilistic evaluation
+  quantile_levels:
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+
+  # Metrics to compute
+  # Supported: mse, mae, mase, smape, crps
+  metrics:
+    - mse
+    - mae
+    - mase
+    - smape
+    - crps
+
+  # Base directory for saving experiment results
+  output_dir: "experiments"
+
+  # Plotting settings
+  plot:
+    # Whether to generate forecast plots
+    enabled: true
+    # Number of stocks to plot (random subset)
+    num_stocks: 10
+    # Number of historical context days to show in the plot
+    context_days_shown: 90
