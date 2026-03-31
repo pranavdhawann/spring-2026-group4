@@ -1,0 +1,18 @@
+# PyTorch (CUDA-compatible)
+torch>=2.0.0
+# Core Chronos & HF Ecosystem
+git+https://github.com/amazon-science/chronos-forecasting.git
+transformers>=4.38.0
+datasets>=2.17.0
+gluonts>=0.14.4
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+scikit-learn>=1.2.0
+
+# Visualization & Utils
+matplotlib>=3.7.0
+PyYAML>=6.0
+tqdm>=4.65.0
