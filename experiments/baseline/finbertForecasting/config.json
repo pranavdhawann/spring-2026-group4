@@ -37,7 +37,7 @@
     "BASELINE_DATA_PATH": "data/baseline_data",
     "TICKER2IDX": "tickers2id.json",
     "HISTORY_WINDOW_SIZE": 14,
-    "FORECAST_HORIZON": 7,
+    "FORECAST_HORIZON": 5,
     "STRIDE": 2,
     "N_STOCKS": 250,
     "data_path": "data/baseline_data",
