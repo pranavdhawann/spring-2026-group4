@@ -1,0 +1,38 @@
+data:
+  csv: data/sp500_time_series/aa.csv
+  date_col: Date
+
+window:
+  lookback: 60
+  horizon: 5
+
+split:
+  train: 0.70
+  val: 0.15
+
+model:
+  hidden1: 128
+  hidden2: 64
+  dropout: 0.2
+  output_bound: null   
+  
+training:
+  lr: 1.0e-3
+  batch_size: 64
+  epochs: 200
+  patience: 10
+  clip_norm: 1.0
+  lr_factor: 0.5
+  lr_patience: 5
+  huber_delta: 0.01
+  zero_alpha: 0.1    # strength of anti-zero penalty (0 = plain Huber)
+  zero_sigma: 0.2    # width of zero-avoidance bump, in scaled target units
+  mag_weight_alpha: 0.75  # upweights higher-|target| rows in Huber term
+  mag_weight_power: 1.0   # curvature of magnitude reweighting
+  mag_weight_cap: 7.0     # cap to avoid very large weights
+  direction_alpha: 0.40   # weight of sign-direction BCE auxiliary term
+  seed: 42
+
+artifacts:
+  checkpoint: artifacts/model.pt
+  metrics: artifacts/test_metrics.csv
