@@ -1,0 +1,55 @@
+# TabNet Baseline Configuration
+
+experiment_path: "experiments/baseline/baseline_results_tabnet"
+
+preprocessing:
+  ts_cols:
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - dividends
+    - stock splits
+
+  table_cols:
+    - us-gaap_Assets
+    - us-gaap_AssetsCurrent
+    - us-gaap_Liabilities
+    - us-gaap_LiabilitiesCurrent
+    - us-gaap_StockholdersEquity
+    - us-gaap_NetCashProvidedByUsedInOperatingActivities
+    - us-gaap_RetainedEarningsAccumulatedDeficit
+
+  text_dim: 64
+  feature_batch_size: 5000
+  test_train_split: 0.2
+  random_seed: 42
+
+
+text_encoding:
+  max_articles: 50
+  max_length: 256
+
+
+model:
+  output_dim: 7
+  n_d: 64
+  n_a: 64
+  n_steps: 5
+  gamma: 1.5
+  n_independent: 2
+  n_shared: 2
+  lambda_sparse: 0.0001
+  seed: 42
+  device_name: "cuda"
+
+
+training:
+  max_epochs: 30
+  patience: 10
+  batch_size: 512
+  virtual_batch_size: 128
+  eval_metric: ["mae"]
+
+random_seed: 42
