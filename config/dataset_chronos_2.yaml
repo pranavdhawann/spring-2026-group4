@@ -1,0 +1,16 @@
+dataset:
+  csv_directory: "data/sp500_time_series"
+  sample_ratio: 1.0
+  sample_seed: 42
+  timestamp_column: "Date"
+
+  target_columns:
+    - "Close"
+
+  strict_target_columns: false
+  target_transform: "log_return"
+  frequency: "B"
+
+  nan_handling:
+    method: "ffill_bfill"
+    max_gap: 10
