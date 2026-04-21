@@ -1,10 +1,5 @@
-sudo apt update
-sudo apt install python3.12-venv
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirments.txt
-./setup_dataset.sh#!/bin/bash
-# setup_project.sh
+#!/bin/bash
+# setup_ubuntu.sh
 # This script sets up the Python environment, installs dependencies, and runs the dataset setup.
 
 set -e  # Exit immediately if a command exits with a non-zero status
@@ -13,7 +8,7 @@ set -e  # Exit immediately if a command exits with a non-zero status
 echo "Updating package lists..."
 sudo apt update
 
-echo "Installing python3.12-venv..."
+echo "Installing python3.12-venv and unzip..."
 sudo apt install -y python3.12-venv unzip
 
 # Create and activate virtual environment

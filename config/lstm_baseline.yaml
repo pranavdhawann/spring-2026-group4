@@ -1,0 +1,37 @@
+# LSTM Baseline Configuration
+# ============================
+
+# Model architecture
+input_size: 16                    # Number of input features per timestep
+hidden_size: 128                  # LSTM hidden dimension
+num_layers: 2                     # Number of stacked LSTM layers
+dropout: 0.2                      # Dropout rate
+output_size: 7                    # Forecast horizon (days to predict)
+bidirectional: false              # Use bidirectional LSTM
+use_attention: false              # Add attention mechanism
+use_layer_norm: true              # Add layer normalization
+fc_hidden_sizes: [64, 32]         # Fully connected head layer sizes
+
+# Training hyperparameters
+epochs: 100
+batch_size: 64
+learning_rate: 0.001
+weight_decay: 0.0001
+lr_scheduler: "reduce_on_plateau" # "reduce_on_plateau" | "cosine" | "none"
+lr_patience: 5                    # Patience for ReduceLROnPlateau
+lr_factor: 0.5                    # Factor for ReduceLROnPlateau
+early_stopping_patience: 15
+gradient_clip_norm: 1.0
+
+# Data preprocessing
+feature_groups:
+  - "ohlcv"
+  - "technical"
+  - "temporal"
+val_ratio: 0.15                   # Fraction of training data used for validation
+
+# Paths (relative to project root)
+output_dir: "reports/experimental_results_lstm"
+
+# Reproducibility
+random_seed: 42
