@@ -1,0 +1,37 @@
+data:
+  data_dir: data/sp500_time_series
+  context_length: 60
+  horizon: 5
+
+universe:
+  start: "2020-01-01"
+  end: "2024-12-31"
+  top_n: 1000
+  metric: dollar_volume      # dollar_volume | volume
+  min_days: 400              # require at least this many trading days in window
+
+model:
+  patch_len: 16
+  stride: 4
+  d_model: 128
+  n_heads: 8
+  encoder_layers: 3
+  ffn_dim: 256
+  dropout: 0.1
+  fc_dropout: 0.1
+  revin_affine: false
+  learn_pos_embed: true
+
+train:
+  seed: 42
+  batch_size: 256
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  max_steps: 5000
+  val_every: 100
+  patience: 10
+  grad_clip: 10.0
+  huber_delta: 0.003
+  train_frac: 0.7
+  val_frac: 0.1
+  ckpt_path: predict/best.pt
