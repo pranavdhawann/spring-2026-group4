@@ -1,19 +1,6 @@
 model:
-  # HuggingFace model identifier
-  # Options: "amazon/chronos-2", "amazon/chronos-bolt-tiny",
-  #          "amazon/chronos-bolt-base", "amazon/chronos-t5-large"
   model_id: "amazon/chronos-2"
-
-  # Device placement: "cpu", "cuda", or "auto"
   device_map: "cuda"
-
-  # Floating-point precision: "float32", "float16", "bfloat16"
-  # Use float32 for stock prices to avoid coarse bf16 quantization.
   torch_dtype: "float32"
-
-  # Number of sample trajectories for probabilistic forecasting (CRPS)
-  num_samples: 20
-
-  # Maximum context length fed to the model.
-  # Shorter context is usually more stable for split-heavy stock histories.
-  max_context_length: 512
+  num_samples: 100
+  max_context_length: 2048

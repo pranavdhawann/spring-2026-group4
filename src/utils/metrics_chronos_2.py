@@ -47,6 +47,14 @@ def mae(
     return np.mean(np.abs(forecast - ground_truth), axis=1)
 
 
+def rmse(
+    ground_truth: np.ndarray,
+    forecast: np.ndarray,
+) -> np.ndarray:
+    """Root Mean Squared Error per series."""
+    return np.sqrt(mse(ground_truth, forecast))
+
+
 def mase(
     ground_truth: np.ndarray,
     forecast: np.ndarray,
@@ -160,6 +168,9 @@ def compute_all_metrics(
             - ``"aggregated"``: ``{metric_name: float}`` — mean across series.
             - ``"per_series"``: ``{metric_name: np.ndarray}`` — per-series values.
     """
+    # TODO: Point metrics currently use the pseudo-sample median, which can
+    # differ from the model's direct p50 quantile when samples are interpolated
+    # from quantiles. Revisit if exact p50-based point metrics are required.
     # Median forecast (0.5 quantile along samples axis)
     median_forecast = np.median(samples, axis=1)  # (N, H)
 
@@ -169,6 +180,7 @@ def compute_all_metrics(
     metric_funcs = {
         "mse": lambda: mse(ground_truth, median_forecast),
         "mae": lambda: mae(ground_truth, median_forecast),
+        "rmse": lambda: rmse(ground_truth, median_forecast),
         "mase": lambda: mase(ground_truth, median_forecast, seasonal_errors),
         "smape": lambda: smape(ground_truth, median_forecast),
         "crps": lambda: crps_ensemble(ground_truth, samples),

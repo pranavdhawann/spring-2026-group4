@@ -6,11 +6,30 @@ forecast, and prediction intervals.
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+QUANTILE_BAND_COLORS = [
+    "#A0CBE8",
+    "#FFBE7D",
+    "#8CD17D",
+    "#FF9D9A",
+]
+
+
+def _select_interval_pairs(quantile_levels: List[float]) -> List[Tuple[int, int]]:
+    """Pick symmetric forecast intervals from outermost to innermost."""
+    q_levels = np.asarray(quantile_levels, dtype=np.float64)
+    paired: List[Tuple[int, int]] = []
+    for low_idx in range(len(q_levels)):
+        high_idx = len(q_levels) - 1 - low_idx
+        if low_idx >= high_idx:
+            break
+        paired.append((low_idx, high_idx))
+    return paired
 
 
 def plot_stock_forecast(
@@ -22,8 +41,10 @@ def plot_stock_forecast(
     quantile_levels: List[float],
     output_dir: str,
     context_days_shown: int = 90,
+    context_timestamps: Optional[np.ndarray] = None,
+    forecast_timestamps: Optional[np.ndarray] = None,
 ) -> Path:
-    """Plot a single stock's forecast vs actuals with prediction intervals.
+    """Plot a backtest-style forecast vs actual chart with a shared pivot.
 
     Args:
         ticker: Stock ticker name (used in title and filename).
@@ -35,64 +56,109 @@ def plot_stock_forecast(
             *quantile_forecast*.
         output_dir: Directory to save the plot.
         context_days_shown: Number of trailing context days to display.
+        context_timestamps: Optional timestamps aligned to *context_values*.
+        forecast_timestamps: Optional timestamps aligned to *ground_truth*.
 
     Returns:
         Path to the saved PNG file.
     """
+    import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
+    import pandas as pd
 
     horizon = len(ground_truth)
     ctx_shown = min(context_days_shown, len(context_values))
-    ctx_tail = context_values[-ctx_shown:]
+    ctx_tail = np.asarray(context_values[-ctx_shown:], dtype=np.float64)
+    pivot_price = float(ctx_tail[-1])
 
-    # X-axis: context days (negative) + horizon days (positive)
-    ctx_x = np.arange(-ctx_shown, 0)
-    horizon_x = np.arange(0, horizon)
+    actual_values = np.concatenate([[pivot_price], np.asarray(ground_truth, dtype=np.float64)])
+    predicted_values = np.concatenate(
+        [[pivot_price], np.asarray(median_forecast, dtype=np.float64)]
+    )
+
+    interval_pairs = _select_interval_pairs(quantile_levels)
+
+    use_dates = context_timestamps is not None and forecast_timestamps is not None
+    if use_dates:
+        history_x = pd.DatetimeIndex(
+            pd.to_datetime(context_timestamps[-ctx_shown:])
+        ).tz_localize(None)
+        forecast_x = pd.DatetimeIndex(
+            pd.to_datetime(forecast_timestamps)
+        ).tz_localize(None)
+        pivot_x = history_x[-1]
+        future_x = pd.DatetimeIndex([pivot_x, *forecast_x])
+    else:
+        history_x = np.arange(-ctx_shown + 1, 1)
+        pivot_x = 0
+        future_x = np.arange(0, horizon + 1)
 
     fig, ax = plt.subplots(figsize=(14, 6))
 
-    # Historical context
-    ax.plot(ctx_x, ctx_tail, color="#2c3e50", linewidth=1.2, label="History")
+    ax.plot(history_x, ctx_tail, color="#4C72B0", linewidth=2.0, label="History")
+    ax.plot(
+        future_x,
+        actual_values,
+        color="#2ca02c",
+        linewidth=2.0,
+        marker="o",
+        markersize=5,
+        label="Actual",
+    )
+    ax.plot(
+        future_x,
+        predicted_values,
+        color="#DD8452",
+        linewidth=2.0,
+        marker="s",
+        markersize=5,
+        label="Predicted",
+    )
 
-    # Ground truth (horizon)
-    ax.plot(horizon_x, ground_truth, color="#2c3e50", linewidth=1.2,
-            linestyle="--", label="Actual")
-
-    # Median forecast
-    ax.plot(horizon_x, median_forecast, color="#e74c3c", linewidth=1.8,
-            label="Median forecast")
-
-    # Prediction intervals — shade from outer to inner
-    # Pair quantiles symmetrically: (0.1, 0.9), (0.2, 0.8), (0.3, 0.7)
-    q_levels = np.array(quantile_levels)
-    alphas = [0.12, 0.18, 0.25, 0.35]
-    paired = []
-    for i in range(len(q_levels)):
-        j = len(q_levels) - 1 - i
-        if i >= j:
-            break
-        paired.append((i, j))
-
-    for idx, (lo_idx, hi_idx) in enumerate(paired):
-        lo_q = q_levels[lo_idx]
-        hi_q = q_levels[hi_idx]
-        alpha = alphas[min(idx, len(alphas) - 1)]
+    alphas = [0.12, 0.18, 0.24, 0.30]
+    for band_idx, (lo_idx, hi_idx) in enumerate(interval_pairs):
+        lower_band = np.concatenate(
+            [[pivot_price], np.asarray(quantile_forecast[lo_idx], dtype=np.float64)]
+        )
+        upper_band = np.concatenate(
+            [[pivot_price], np.asarray(quantile_forecast[hi_idx], dtype=np.float64)]
+        )
         ax.fill_between(
-            horizon_x,
-            quantile_forecast[lo_idx],
-            quantile_forecast[hi_idx],
-            alpha=alpha,
-            color="#3498db",
-            label=f"p{int(lo_q*100)}–p{int(hi_q*100)}" if idx < 3 else None,
+            future_x,
+            lower_band,
+            upper_band,
+            alpha=alphas[min(band_idx, len(alphas) - 1)],
+            color=QUANTILE_BAND_COLORS[band_idx % len(QUANTILE_BAND_COLORS)],
+            label=(
+                f"Q{int(round(quantile_levels[lo_idx] * 100))}-"
+                f"Q{int(round(quantile_levels[hi_idx] * 100))}"
+            ),
         )
 
-    # Vertical line at forecast start
-    ax.axvline(x=0, color="#7f8c8d", linestyle=":", linewidth=0.8, alpha=0.7)
+    ax.axvline(x=pivot_x, color="gray", linestyle=":", linewidth=1.2)
+    ax.text(
+        pivot_x,
+        0.02,
+        " forecast start",
+        color="gray",
+        fontsize=8,
+        va="bottom",
+        transform=ax.get_xaxis_transform(),
+    )
 
-    ax.set_title(f"{ticker} — Chronos 2 Zero-Shot Forecast", fontsize=14, fontweight="bold")
-    ax.set_xlabel("Trading days (relative to forecast start)")
+    ax.set_title(
+        f"{ticker.upper()} - {len(ctx_tail)}-Step History + {horizon}-Step Forecast",
+        fontsize=14,
+        fontweight="bold",
+    )
+    if use_dates:
+        ax.set_xlabel("Date")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+        fig.autofmt_xdate()
+    else:
+        ax.set_xlabel("Trading days (relative to forecast start)")
     ax.set_ylabel("Price ($)")
-    ax.legend(loc="upper left", fontsize=9)
+    ax.legend(loc="best", fontsize=9)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
 

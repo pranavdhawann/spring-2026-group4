@@ -1,49 +1,16 @@
 dataset:
-  # Directory containing {ticker}.csv files.
-  # Supports local paths and S3 prefixes, for example:
-  #   "C:/data/stocks"
-  #   "s3://my-bucket/stocks/"
-  csv_directory: "/home/ubuntu/chronos/data/raw/"
-
-  # Fraction of stocks to sample for evaluation (0.0-1.0)
-  sample_ratio: 0.2
-
-  # Random seed for reproducible sampling
+  csv_directory: "data/sp500_time_series"
+  sample_ratio: 1.0
   sample_seed: 42
-
-  # Name of the timestamp column in the CSV
   timestamp_column: "Date"
 
-  # Target value columns to evaluate.
-  # For stock evaluation we usually forecast Close only.
-  # If you include optional fields like "Capital Gains" that may be absent
-  # in some tickers, keep strict_target_columns: false below.
   target_columns:
     - "Close"
-    # - "Open"
-    # - "High"
-    # - "Low"
-    # - "Volume"
-    # - "Dividends"
-    # - "Stock Splits"
-    # - "Capital Gains"
 
-  # If false, missing requested target columns are ignored per ticker.
   strict_target_columns: false
-
-  # Transform applied before forecasting:
-  #   "none"       -> forecast raw target values
-  #   "log_return" -> forecast log returns, then map back to price for metrics/plots
   target_transform: "log_return"
-
-  # Time series frequency override.
-  # Stock data has gaps (weekends/holidays), so auto-detect can fail.
-  # Business-day frequency works well for OHLCV series.
   frequency: "B"
 
-  # Missing-value handling
   nan_handling:
-    # Strategy: "ffill_bfill", "interpolate", or "drop"
     method: "ffill_bfill"
-    # Maximum consecutive NaN gap before dropping a column
     max_gap: 10
