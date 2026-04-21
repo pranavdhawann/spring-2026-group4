@@ -1,0 +1,6 @@
+model:
+  model_id: "amazon/chronos-2"
+  device_map: "cuda"
+  torch_dtype: "float32"
+  num_samples: 100
+  max_context_length: 2048

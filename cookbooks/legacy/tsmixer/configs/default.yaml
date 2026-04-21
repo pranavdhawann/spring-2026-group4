@@ -1,0 +1,38 @@
+data:
+  dir: data/sp500_time_series
+  target: log_return
+  lookback: 60
+  horizon: 5
+  train_frac: 0.7
+  val_frac: 0.15
+  scale_returns: 1.0
+
+universe:
+  start: "2020-01-01"
+  end: "2025-01-01"
+  top_n: 500
+  min_days: 252
+
+model:
+  n_blocks: 4
+  ff_dim: 128
+  dropout: 0.1
+  ticker_embed_dim: 8
+
+train:
+  batch_size: 64
+  epochs: 100
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  patience: 10
+  grad_clip: 1.0
+  loss_type: mixed
+  huber_delta: 0.003
+  quantile_lambda: 0.3
+  quantile_q: 0.9
+  per_ticker_eval: false
+  device: cuda
+  seed: 42
+
+output:
+  ckpt_dir: predict
