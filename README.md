@@ -4,6 +4,10 @@ GWU Data Science Capstone - Spring 2026
 Pranav Dhawan, Aakash Singh Sivaram, Akshit Reddy Palle, Sayam Palrecha  
 Supervised by Amir Jafari
 
+<p align="center">
+  <img src="research_paper/figs/main.gif" alt="Project GIF" />
+</p>
+
 ## Overview
 
 This repository contains the full experimental pipeline for our capstone project benchmarking multimodal deep learning architectures for short-horizon stock price forecasting on S&P 500 equities.
@@ -15,6 +19,21 @@ We systematically compare unimodal temporal encoders, pretrained time-series fou
 - Structured SEC fundamental features
 
 Our central finding is that the choice of fusion mechanism dominates the choice of temporal encoder. Cross-attention and encoder-decoder fusion between a temporal encoder and FinBERT improve on unimodal baselines, while concatenation-based late fusion underperforms them due to modality imbalance.
+
+<table align="center" width="100%">
+  <tr>
+    <th width="50%">Plot 1: TSMixer Forecast</th>
+    <th width="50%">Plot 2: LSTM Forecast</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="\research_paper\figs\forecast_aal_tsmixer.png" alt="forecast_tsmixer" width="100%" />
+    </td>
+    <td align="center">
+      <img src="\research_paper\figs\forecast_aapl_lstm.png" alt="forecast_lstm" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ## Repository Structure
 
@@ -132,17 +151,6 @@ See `cookbooks/` for step-by-step notebooks covering each model family and ablat
 | TFT-FinBERT | 1.1672 | 0.7504 |
 
 Note: Models are evaluated in different output spaces (log-return vs. dollar price). Direct cross-group comparison should be made with care. See the full report in `research_paper/` for a detailed discussion.
-
-## Configuration
-
-All hyperparameters, data paths, and training settings are controlled via YAML files in `config/`.
-
-Key parameters:
-
-- `lookback_window`: `T in {20, 30, 60, 90}` trading days (model-dependent)
-- `forecast_horizon`: `H in {5, 7}` trading days
-- `train_split`: Chronological `70/15/15` train/val/test split
-- `loss`: Huber loss (`delta = 1.0`) for price models; combined Huber + directional BCE for return models
 
 ## Pre-commit Hooks
 
