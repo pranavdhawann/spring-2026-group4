@@ -1,0 +1,130 @@
+# ============================================================
+# Temporal GNN Stock Forecasting — Configuration
+# Adapted for FinMultiTime dataset + NVIDIA A10G (24GB)
+# ============================================================
+
+# === Data ===
+data:
+  data_dir: "data/"
+  min_history: 252
+  window_size: 60
+  horizon: 5
+  log_return_clip_sigma: 5.0
+  zscore_min_days: 60
+  news_cutoff_time: "16:00"
+  news_encoder_model: "ProsusAI/finbert"  # or "sentence-transformers/all-MiniLM-L6-v2"
+  news_pooling: "mean"                    # "mean" (default), "cls", or "pooler" — see preprocess_news_gnn.py fix E12
+  # FinMultiTime directory names
+  time_series_dir: "sp500_time_series"
+  news_dir: "sp500_news"
+  table_dir: "sp500_table"
+  description_file: "sp500stock_data_description.csv"
+  news_cache_dir: "cache/news_embeddings"
+  max_tickers: 100                      # limit number of tickers; null = use all (~4213 in S&P 500)
+
+# === Graph ===
+graph:
+  correlation_top_k: 10
+  correlation_recompute_days: 5      # deprecated — edges now computed fresh per date
+  correlation_window: 60
+  edge_dropout: 0.1
+  protect_self_loops: true
+
+# === Model ===
+model:
+  # Time series encoder
+  ts_encoder: "tcn"                   # "tcn" or "transformer"
+  ts_input_dim: 21                    # 6 base + 15 technical indicators (OHLCV-only inputs)
+  tcn_channels: [64, 128, 128, 256]
+  tcn_kernel_size: 3
+  transformer_layers: 4
+  transformer_heads: 4
+  # Dimensions
+  d_fused: 256
+  d_ts: 256
+  d_news: 256
+  d_rep: 256
+  # Fusion
+  fusion_mode: "concat"               # "concat" or "cross_attention"
+  # Temporal GNN
+  temporal_gnn: "auto"                # "auto", "evolvegcn_h", or "pyg_gcn_gru"
+  gnn_layers: 3
+  num_gnn_snapshots: 4           # number of graph snapshots for EvolveGCN (was 60=window_size, wasteful)
+  forecast_horizon: 5
+  dropout: 0.1
+
+# === Training (tuned for A10G 24GB) ===
+training:
+  optimizer: "adamw"
+  lr: 3.0e-4                           # raised from 1e-4 — LR schedule now correct
+  lr_min: 1.0e-6
+  lr_schedule: "cosine"
+  warmup_ratio: 0.02                   # reduced from 0.05 — was too long (see train_gnn.py fix)
+  weight_decay: 1.0e-5
+  gradient_clip: 1.0
+  grad_accumulation_steps: 4           # reduced from 8 → effective batch=4 (was 8)
+  max_epochs: 100                      # keep 100 — early stopping still active
+  early_stopping_patience: 10
+  early_stopping_metric: "val_mae_log_return"
+  mixed_precision: true                # fp16 — essential for A10G memory
+  loss_alpha: 1.0
+  loss_beta: 0.1
+  loss_gamma: 0.01                     # reduced from 0.1 — direction loss was 97% of total, collapsing predictions to zero (FIX M9)
+  loss_delta: 0.1                      # variance regularizer weight — penalizes pred_std < target_std to prevent collapse (FIX L4)
+  direction_loss_type: "weighted_bce"  # FIX L1: replace degenerate tanh with weighted BCE on sign
+  loss_type: "huber"                   # "mse" or "huber" — Huber is more robust to outlier log returns
+  huber_delta: 0.03                    # ~1.5σ of daily log returns → most samples in quadratic regime
+  # direction_logit_scale: 100.0       # Obsolete — separate DirectionHead used instead (FIX L3)
+  label_smoothing: 0.05                # Smooth directional BCE targets: 0→0.05, 1→0.95
+
+# === Evaluation ===
+evaluation:
+  mc_dropout_samples: 10
+  long_short_decile: 0.1
+  walk_forward: false
+  walk_forward_step: 20
+
+# === Split ===
+split:
+  val_days: 90                         # increased from 45 → more stable evaluation signal
+  test_days: 90                        # increased from 45 → more stable evaluation signal
+  purge_days: 5
+
+# === Reproducibility ===
+seed: 42
+deterministic: true
+num_seed_runs: 1
+
+# === Logging ===
+logging:
+  backend: "wandb"
+  wandb_mode: "offline"
+  project: "tgnn-stock-forecast"
+  level: "INFO"
+  console_level: "INFO"
+  file_level: "DEBUG"
+  dir: "tgnn/logs/runs"
+  capture_warnings: true
+  log_every_n_steps: 10
+
+# === Grid Search ===
+# Used by grid_search_gnn.py — defines the hyperparameter sweep.
+# These values override the base config for each trial.
+# grid_search_gnn.py uses a curated coarse grid, not the full Cartesian product.
+grid_search:
+  # Core hyperparameters to sweep
+  window_size: [20, 40, 60, 90]
+  lr: [1.0e-4, 3.0e-4, 5.0e-4]
+  dropout: [0.1, 0.2, 0.3]
+  fusion_mode: ["concat", "cross_attention"]
+  num_gnn_snapshots: [2, 4, 8]
+  loss_type: ["mse", "huber"]
+  gamma: [0.01, 0.1]
+  max_tickers: [500]
+  # Grid search training settings (aggressive early stopping for speed)
+  max_epochs: 15
+  early_stopping_patience: 5
+  # Results output
+  results_dir: "tgnn/results"
+  results_csv: "tgnn/results/grid_search_results.csv"
+  best_config_path: "tgnn/results/best_config_gnn.yaml"
