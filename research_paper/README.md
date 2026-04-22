@@ -1,3 +1,4 @@
-# Literature Review
+﻿# Research Paper
 
-This folder contains documents and notes related to the literature review, including research papers, summaries, and references relevant to the project.
+LaTeX source, bibliography, and compiled artifacts for the capstone report.
+Edit manuscript content here and keep references/figures synchronized.
