@@ -5,7 +5,7 @@ Pranav Dhawan, Aakash Singh Sivaram, Akshit Reddy Palle, Sayam Palrecha
 Supervised by Amir Jafari
 
 <p align="center">
-  <img src="research_paper/figs/main.gif" alt="Project GIF" />
+  <img src="research_paper/figs/main.gif" alt="Project GIF" width ="70%"/>
 </p>
 
 ## Overview
