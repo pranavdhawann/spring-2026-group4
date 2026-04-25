@@ -148,7 +148,7 @@ See `cookbooks/` for step-by-step notebooks covering each model family and ablat
 | LSTM | 1.4043 | 1.0880 |
 | ChronosFinBert (60d) | 0.1250 | 0.0420 |
 | TCN-FinBERT | 0.8119 | 0.5217 |
-| TFT-FinBERT | 1.1672 | 0.7504 |
+| TFT-FinBERT | 0.812 | 0.521 |
 
 Note: Models are evaluated in different output spaces (log-return vs. dollar price). Direct cross-group comparison should be made with care. See the full report in `research_paper/` for a detailed discussion.
 
