@@ -2,7 +2,7 @@
 
 GWU Data Science Capstone - Spring 2026  
 Pranav Dhawan, Aakash Singh Sivaram, Akshit Reddy Palle, Sayam Palrecha  
-Supervised by Amir Jafari
+Supervised by Dr Amir Jafari
 
 <p align="center">
   <img src="research_paper/figs/main.gif" alt="Project GIF" width ="70%"/>
