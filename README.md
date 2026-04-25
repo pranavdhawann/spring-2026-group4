@@ -178,5 +178,5 @@ If you use this codebase or the findings from our paper, please cite:
 
 ## Acknowledgements
 
-Supervised by Amir Jafari, GWU Data Science Program.  
+Supervised by Dr Amir Jafari, GWU Data Science Program.  
 Dataset: FinMultiTime (Peng et al., 2025) and the S&P 500 Multimodal Financial Dataset (Wenyan, 2024).
