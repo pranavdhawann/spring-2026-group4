@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import pandas as pd
 
 
 APP_PATH = Path(__file__).with_name("app.py")
@@ -17,11 +18,11 @@ def test_legacy_models_are_available_and_loadable():
 
     available = app.get_available_models()
 
-    assert "LSTM (Legacy)" in available
-    assert "TSMixer (Legacy)" in available
+    assert "LSTM" in available
+    assert "TSMixer" in available
 
-    lstm, lstm_loaded, _, _ = app.load_model({}, "LSTM (Legacy)")
-    tsmixer, tsmixer_loaded, _, _ = app.load_model({}, "TSMixer (Legacy)")
+    lstm, lstm_loaded, _, _ = app.load_model({}, "LSTM")
+    tsmixer, tsmixer_loaded, _, _ = app.load_model({}, "TSMixer")
 
     assert lstm is not None
     assert tsmixer is not None
@@ -29,39 +30,114 @@ def test_legacy_models_are_available_and_loadable():
     assert tsmixer_loaded
 
 
-def test_future_dates_are_after_last_market_date():
+def test_tft_models_are_available_and_loadable():
     app = load_demo_app()
 
-    future_dates = app.build_future_dates("2026-04-24", 5)
+    available = app.get_available_models()
 
-    assert len(future_dates) == 5
-    assert all(str(day.date()) > "2026-04-24" for day in future_dates)
-    assert all(day.dayofweek < 5 for day in future_dates)
+    assert "TFT" in available
+    assert "TFT-FinBERT" in available
+
+    base_config = {
+        "model": {
+            "input_size": 12,
+            "output_size": 5,
+            "hidden_size": 128,
+            "num_heads": 4,
+            "dropout": 0.1,
+            "lstm_layers": 1,
+        },
+        "num_articles": 4,
+        "max_window_size": 14,
+        "time_series_features": 12,
+        "local_files_only": False,
+    }
+
+    standalone, standalone_loaded, _, standalone_path = app.load_model(base_config, "TFT")
+    multimodal, multimodal_loaded, _, multimodal_path = app.load_model(base_config, "TFT-FinBERT")
+
+    assert standalone is not None
+    assert multimodal is not None
+    assert standalone_loaded
+    assert multimodal_loaded
+    assert Path(standalone_path).parts[-2:] == ("experiments", "tft")
+    assert Path(multimodal_path).parts[-2:] == ("experiments", "tft_finbert")
 
 
-def test_price_rmse_band_wraps_forecast_path():
+def test_backtest_window_uses_past_context_and_known_actuals():
+    app = load_demo_app()
+    df = pd.DataFrame({
+        "date": pd.bdate_range("2026-04-01", periods=10),
+        "close": range(100, 110),
+    })
+
+    valid_dates = app.get_valid_backtest_start_dates(df, seq_len=4, horizon=3)
+    context, actual = app.prepare_backtest_window(df, seq_len=4, horizon=3, backtest_start_date=valid_dates[-1])
+
+    assert [d.strftime("%Y-%m-%d") for d in valid_dates] == [
+        "2026-04-07",
+        "2026-04-08",
+        "2026-04-09",
+        "2026-04-10",
+    ]
+    assert context["close"].tolist() == [103, 104, 105, 106]
+    assert actual["close"].tolist() == [107, 108, 109]
+
+
+def test_find_date_position_handles_datetime_index():
+    app = load_demo_app()
+    dates = pd.DatetimeIndex(pd.bdate_range("2026-04-01", periods=5))
+
+    assert app.find_date_position(dates, "2026-04-03") == 2
+
+
+def test_latest_backtest_start_date_uses_most_recent_valid_window():
+    app = load_demo_app()
+    dates = pd.bdate_range("2026-04-01", periods=10)
+
+    assert app.get_latest_backtest_start_date(list(dates)) == dates[-1]
+
+
+def test_fetch_news_data_returns_blanks_when_yfinance_news_fails(monkeypatch):
     app = load_demo_app()
 
-    predicted = [101.0, 102.0, 103.0]
-    lower, upper = app.build_price_rmse_band(100.0, predicted, [0.01, 0.02, 0.03])
+    class BrokenTicker:
+        @property
+        def news(self):
+            raise ValueError("bad json")
 
-    assert len(lower) == len(predicted)
-    assert len(upper) == len(predicted)
-    assert all(lo < mid < hi for lo, mid, hi in zip(lower, predicted, upper))
+    monkeypatch.setattr(app.yf, "Ticker", lambda ticker: BrokenTicker())
+    app.fetch_news_data.clear()
+
+    assert app.fetch_news_data("AAPL", max_articles=3) == ["", "", ""]
 
 
-def test_rmse_fill_series_includes_latest_close_anchor():
+def test_backtest_metrics_compare_predicted_to_actual_and_direction():
     app = load_demo_app()
 
-    dates, lower, upper = app.build_rmse_fill_series(
-        "2026-04-24",
-        100.0,
-        app.build_future_dates("2026-04-24", 2),
-        [101.0, 102.0],
-        [0.01, 0.02],
+    metrics = app.compute_backtest_metrics(
+        context_last_price=100.0,
+        actual_prices=[101.0, 99.0, 103.0],
+        predicted_prices=[102.0, 98.0, 104.0],
     )
 
-    assert len(dates) == 3
-    assert dates[0].strftime("%Y-%m-%d") == "2026-04-24"
-    assert lower[0] == 100.0
-    assert upper[0] == 100.0
+    assert metrics["mae"] == 1.0
+    assert round(metrics["rmse"], 4) == 1.0
+    assert round(metrics["directional_accuracy"], 4) == 100.0
+
+
+def test_backtest_figure_labels_actual_predicted_and_context_divider():
+    app = load_demo_app()
+
+    fig = app.build_backtest_figure(
+        history_dates=list(pd.bdate_range("2026-04-01", periods=4)),
+        history_prices=[100.0, 101.0, 102.0, 103.0],
+        backtest_dates=list(pd.bdate_range("2026-04-07", periods=2)),
+        actual_prices=[104.0, 105.0],
+        pred_prices=[103.5, 105.5],
+    )
+
+    trace_names = [trace.name for trace in fig.data]
+    assert "Actual" in trace_names
+    assert "Predicted" in trace_names
+    assert fig.layout.shapes[0].type == "line"

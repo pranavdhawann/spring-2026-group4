@@ -134,3 +134,4 @@ src/models/train_lstm.py
 src/models/lstm_dataset.py
 src/models/README.md
 demo/.claude/settings.local.json
+demo/test_app_adapters.py
