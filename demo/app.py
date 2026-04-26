@@ -2,6 +2,7 @@ import datetime
 import importlib
 import importlib.util
 import json
+import logging
 import os
 import pickle
 import sys
@@ -17,6 +18,15 @@ import plotly.graph_objects as go
 import yaml
 from sklearn.exceptions import InconsistentVersionWarning
 
+try:
+    torch.classes.__path__ = []
+except Exception:
+    pass
+
+yfinance_logger = logging.getLogger("yfinance")
+yfinance_logger.setLevel(logging.CRITICAL)
+yfinance_logger.propagate = False
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 SRC_MODELS_DIR = os.path.join(PROJECT_ROOT, "src", "models")
@@ -28,8 +38,6 @@ EXPERIMENT_TFT_MULTIMODAL_PATH = os.path.join(
     PROJECT_ROOT, "experiments", "tft_finbert", "TftMultiModalBaseline.py"
 )
 
-# FinBERT in this demo is text-only, so forcing torchvision absent avoids a
-# broken optional native extension in this Windows runtime.
 os.environ.setdefault("TRANSFORMERS_NO_TORCHVISION", "1")
 sys.modules.setdefault("torchvision", None)
 sys.modules.setdefault("torchvision.transforms", None)
@@ -189,7 +197,7 @@ st.markdown(f"""
         color: {TEXT_BODY};
     }}
     .block-container {{
-        padding-top: 1rem;
+        padding-top: 3.5rem;
         padding-bottom: 1rem;
         max-width: 100%;
     }}
@@ -358,9 +366,6 @@ st.markdown(f"""
     div[data-baseweb="notification"][kind="success"] {{
         border-left-color: {ACCENT_GREEN};
     }}
-    hr {{
-        border-color: {GRID};
-    }}
     .stSpinner > div {{
         border-top-color: {ACCENT_ORANGE} !important;
     }}
@@ -374,18 +379,18 @@ def apply_terminal_layout(fig, height=380, show_legend=True):
         paper_bgcolor=BG_PANEL,
         plot_bgcolor=BG_DEEP,
         font=dict(family=MONO_FONT, size=11, color=TEXT_BODY),
-        margin=dict(l=50, r=20, t=20, b=40),
+        margin=dict(l=50, r=20, t=45, b=40),
         height=height,
         hovermode="x unified",
         showlegend=show_legend,
         legend=dict(
             orientation="h",
-            yanchor="bottom", y=1.01,
-            xanchor="right", x=1,
-            bgcolor="rgba(255,255,255,0.9)",
+            yanchor="bottom", y=1.02,
+            xanchor="left", x=0,
+            bgcolor=BG_PANEL,
             bordercolor=GRID,
             borderwidth=1,
-            font=dict(size=10, color=TEXT_BODY, family=MONO_FONT),
+            font=dict(size=9, color=TEXT_BODY, family=MONO_FONT),
         ),
         hoverlabel=dict(
             bgcolor=BG_PANEL,
@@ -421,7 +426,6 @@ def render_terminal_header(ticker, model_type):
 
 @st.cache_data(ttl=3600)
 def fetch_stock_data(ticker, days=150):
-    """Fetch stock data from yfinance, with a Yahoo chart fallback."""
     ticker = ticker.upper().strip()
     end_date = datetime.date.today()
     start_date = end_date - datetime.timedelta(days=days)
@@ -541,7 +545,6 @@ def fetch_news_data(ticker, max_articles=4):
 
 
 def preprocess_data(df):
-    """Calculate indicators and format data."""
     close_prices = df['close']
 
     bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(close_prices)
@@ -595,8 +598,6 @@ def close_by_date(legacy_df):
 
 def reconstruct_prices(last_close, log_returns):
     return last_close * np.exp(np.cumsum(np.asarray(log_returns, dtype=float)))
-
-
 
 
 def fmt_date(d):
@@ -737,28 +738,30 @@ def build_backtest_figure(history_dates, history_prices, backtest_dates, actual_
         yref="paper",
         text="Backtest Start",
         showarrow=False,
-        xanchor="left",
+        xanchor="right",
         yanchor="bottom",
-        font=dict(color=TEXT_MUTED, size=10, family=MONO_FONT),
+        font=dict(color=TEXT_MUTED, size=8, family=MONO_FONT),
     )
     return apply_terminal_layout(fig)
 
 
 def show_backtest_result(ticker, model_type, history_dates, history_prices, backtest_dates, actual_prices, pred_prices):
-    current_price = float(history_prices[-1])
-    metrics = compute_backtest_metrics(current_price, actual_prices, pred_prices)
+    start_price = float(history_prices[-1])
+    actual_close = float(actual_prices[-1])
+    forecast_close = float(pred_prices[-1])
+    actual_return = (actual_close - start_price) / start_price * 100
+    predicted_return = (forecast_close - start_price) / start_price * 100
+    start_label = fmt_date(history_dates[-1])
 
     render_terminal_header(ticker, f"{model_type} Backtest")
 
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3 = st.columns(3)
     with k1:
-        st.metric("MAE", f"${metrics['mae']:,.2f}")
+        st.metric(f"Price {start_label}", f"${start_price:,.2f}")
     with k2:
-        st.metric("RMSE", f"${metrics['rmse']:,.2f}")
+        st.metric("Actual Close", f"${actual_close:,.2f}", delta=f"{actual_return:+.2f}%")
     with k3:
-        st.metric("Directional Accuracy", f"{metrics['directional_accuracy']:.1f}%")
-    with k4:
-        st.metric("Backtest Window", f"{fmt_date(backtest_dates[0])} - {fmt_date(backtest_dates[-1])}")
+        st.metric("Forecast Close", f"${forecast_close:,.2f}", delta=f"{predicted_return:+.2f}%")
 
     chart_tab, data_tab = st.tabs(["Backtest", "Data"])
 
@@ -952,7 +955,6 @@ def main():
         f"""
         <div class="terminal-bar">
             <div class="terminal-title">STOCK BACKTESTING TERMINAL</div>
-            <div class="terminal-meta">MULTI-MODEL &middot; HISTORICAL WINDOW &middot; GROUND TRUTH</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -968,31 +970,24 @@ def main():
             for message in missing_messages:
                 st.write(f"- {message}")
 
+    popular_stocks = [
+        "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN",
+        "META", "TSLA", "BRK-B", "JPM", "V",
+        "WMT", "JNJ", "PG", "MA", "HD"
+    ]
     model_choice = st.sidebar.selectbox("MODEL", [SELECT_PLACEHOLDER] + available_models)
+    ticker = st.sidebar.selectbox("TICKER", options=[SELECT_PLACEHOLDER] + popular_stocks)
+    run_clicked = st.sidebar.button("Run Backtest")
 
-    if model_choice == SELECT_PLACEHOLDER:
+    if model_choice == SELECT_PLACEHOLDER or ticker == SELECT_PLACEHOLDER:
         st.markdown(
-            f"<div class='terminal-meta' style='padding:24px 4px;'>READY · Select an architecture and ticker in the sidebar.</div>",
+            f"<div class='terminal-meta' style='padding:24px 4px;'>READY · Select a model and ticker in the sidebar.</div>",
             unsafe_allow_html=True,
         )
         return
 
     if "TFT-FinBERT" in model_choice and not TRANSFORMERS_AVAILABLE:
         st.sidebar.error("Transformers library not available. Start Streamlit with:\n`python3 -m streamlit run demo/app.py --server.fileWatcherType none`")
-        return
-
-    popular_stocks = [
-        "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN",
-        "META", "TSLA", "BRK-B", "JPM", "V",
-        "WMT", "JNJ", "PG", "MA", "HD"
-    ]
-    ticker = st.sidebar.selectbox("Ticker", options=[SELECT_PLACEHOLDER] + popular_stocks)
-
-    if ticker == SELECT_PLACEHOLDER:
-        st.markdown(
-            f"<div class='terminal-meta' style='padding:24px 4px;'>READY · Select a ticker in the sidebar.</div>",
-            unsafe_allow_html=True,
-        )
         return
 
     backtest_horizon = 5
@@ -1006,20 +1001,6 @@ def main():
     except Exception as e:
         st.error(f"Error loading configs: {e}")
         return
-
-    with st.spinner(f"Loading {model_choice}..."):
-        is_multimodal = "TFT-FinBERT" in model_choice
-        try:
-            model, model_loaded, device, experiment_path = load_model(config, model_choice)
-        except RuntimeError as e:
-            st.info(str(e))
-            return
-        model_type = model_choice.split(" ")[0]
-
-    if not model_loaded:
-        st.sidebar.warning(f"No pre-trained weights for {model_type}. Using untrained baseline.")
-    else:
-        st.sidebar.success(f"weights loaded.")
 
     with st.spinner(f"Fetching data & indicators for {ticker}..."):
         df = fetch_stock_data(ticker, days=150)
@@ -1036,9 +1017,6 @@ def main():
         return
 
     backtest_start_date = get_latest_backtest_start_date(valid_backtest_dates)
-    st.sidebar.caption(f"Backtest start: {pd.Timestamp(backtest_start_date):%Y-%m-%d}")
-
-    run_clicked = st.sidebar.button("Run Backtest")
 
     if not run_clicked:
         st.markdown(
@@ -1046,6 +1024,20 @@ def main():
             unsafe_allow_html=True,
         )
         return
+
+    is_multimodal = "TFT-FinBERT" in model_choice
+    with st.spinner(f"Loading {model_choice}..."):
+        try:
+            model, model_loaded, device, experiment_path = load_model(config, model_choice)
+        except RuntimeError as e:
+            st.info(str(e))
+            return
+        model_type = model_choice.split(" ")[0]
+
+    if not model_loaded:
+        st.sidebar.warning(f"No pre-trained weights for {model_type}. Using untrained baseline.")
+    else:
+        st.sidebar.success("weights loaded.")
 
     if "LSTM" in model_choice:
         try:
