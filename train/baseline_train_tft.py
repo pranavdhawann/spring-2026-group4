@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
-from src.dataLoader.dataLoaderBaselineAkshit import getTrainTestDataLoader
+from src.dataLoader import getTrainTestDataLoaderMM
 from src.models.tft_model import TFTModel
 from src.preProcessing.tcn_baseline_preprocessing import preprocess_for_tcn
 from src.utils import read_json_file, read_yaml, set_seed
@@ -197,7 +197,7 @@ def train(train_config=None):
             "test_train_split": 0.2,
             "random_seed": config["rand_seed"],
         }
-        train_dataset, test_dataset = getTrainTestDataLoader(data_config)
+        train_dataset, test_dataset = getTrainTestDataLoaderMM(data_config)
 
         with open(dataloader_cache, "wb") as f:
             pickle.dump({"train": train_dataset, "test": test_dataset}, f)

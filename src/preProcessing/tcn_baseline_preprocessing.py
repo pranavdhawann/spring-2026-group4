@@ -200,7 +200,7 @@ def preprocess_for_tcn(train_dataset, test_dataset, config, verbose=False):
 if __name__ == "__main__":
     import os
 
-    from src.dataLoader.dataLoaderBaselineAkshit import getTrainTestDataLoader
+    from src.dataLoader import getTrainTestDataLoaderMM
     from src.utils import read_json_file, read_yaml
 
     print("Loading configs...")
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     }
 
     print("\nLoading dataloaders...")
-    train_dataset, test_dataset = getTrainTestDataLoader(data_config)
+    train_dataset, test_dataset = getTrainTestDataLoaderMM(data_config)
 
     print("\nRunning preprocessing...")
     X_train, y_train, X_test, y_test, scaler = preprocess_for_tcn(

@@ -74,3 +74,4 @@ scikit-learn
 torch
 transformers
 streamlit
+chronos-forecasting
