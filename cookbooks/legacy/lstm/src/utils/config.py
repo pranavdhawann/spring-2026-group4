@@ -34,15 +34,7 @@ def _coerce(val: str) -> Any:
     if val.lower() in {"null", "none", "~"}:
         return None
     try:
-        if (
-            any(c in val for c in ".eE")
-            and val.replace("-", "")
-            .replace(".", "")
-            .replace("e", "")
-            .replace("E", "")
-            .replace("+", "")
-            .isdigit()
-        ):
+        if any(c in val for c in ".eE") and val.replace("-", "").replace(".", "").replace("e", "").replace("E", "").replace("+", "").isdigit():
             return float(val)
         return int(val)
     except ValueError:
@@ -53,7 +45,6 @@ def load_config(path: str | Path) -> dict[str, Any]:
     text = Path(path).read_text(encoding="utf-8")
     try:
         import yaml  # type: ignore
-
         return yaml.safe_load(text)
     except ImportError:
         return _tiny_yaml(text)

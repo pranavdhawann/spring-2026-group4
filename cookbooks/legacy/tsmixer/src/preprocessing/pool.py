@@ -1,6 +1,5 @@
 """Pooled cross-asset windowed dataset. Split each asset chronologically, then pool."""
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
@@ -30,13 +29,7 @@ class AssetWindows:
 class PooledWindowDataset(Dataset):
     """Concatenates windows across assets. Target = r_{t+1..t+H} * scale."""
 
-    def __init__(
-        self,
-        assets: List[AssetWindows],
-        lookback: int,
-        horizon: int,
-        target_scale: float,
-    ):
+    def __init__(self, assets: List[AssetWindows], lookback: int, horizon: int, target_scale: float):
         self.L = lookback
         self.H = horizon
         self.scale = target_scale
@@ -59,9 +52,7 @@ class PooledWindowDataset(Dataset):
     def __len__(self) -> int:
         return len(self.offsets)
 
-    def __getitem__(
-        self, idx: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, int, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, int, torch.Tensor]:
         i, s = self.offsets[idx]
         arr = self.arrays[i]
         close = self.closes[i]
@@ -69,12 +60,7 @@ class PooledWindowDataset(Dataset):
         y = arr[s + self.L : s + self.L + self.H, TARGET_IDX] * self.scale
         ticker_id = self.ticker_ids[i]
         anchor_close = np.float32(close[s + self.L - 1])
-        return (
-            torch.from_numpy(x),
-            torch.from_numpy(y.astype(np.float32)),
-            ticker_id,
-            torch.tensor(anchor_close),
-        )
+        return torch.from_numpy(x), torch.from_numpy(y.astype(np.float32)), ticker_id, torch.tensor(anchor_close)
 
 
 def build_splits(
@@ -100,9 +86,7 @@ def build_splits(
         x = feats[FEATURE_COLS].values.astype(np.float32)
         close = np.asarray(close, dtype=np.float32)
         if len(close) != len(x):
-            raise ValueError(
-                f"Close alignment mismatch for {ticker}: close={len(close)} features={len(x)}"
-            )
+            raise ValueError(f"Close alignment mismatch for {ticker}: close={len(close)} features={len(x)}")
         n = len(x)
         i_tr = int(n * train_frac)
         i_va = int(n * (train_frac + val_frac))
@@ -112,44 +96,19 @@ def build_splits(
         scaler = RobustScaler()
         tr_target = x[:i_tr, TARGET_IDX].reshape(-1, 1)
         scaler.fit(tr_target)
-        center = (
-            float(scaler.center_[0])
-            if hasattr(scaler, "center_")
-            else float(np.median(tr_target))
-        )
-        raw_scale = (
-            float(scaler.scale_[0])
-            if hasattr(scaler, "scale_")
-            else float(np.percentile(tr_target, 75) - np.percentile(tr_target, 25))
-        )
+        center = float(scaler.center_[0]) if hasattr(scaler, "center_") else float(np.median(tr_target))
+        raw_scale = float(scaler.scale_[0]) if hasattr(scaler, "scale_") else float(np.percentile(tr_target, 75) - np.percentile(tr_target, 25))
         scale = raw_scale if abs(raw_scale) > 1e-8 else 1.0
         target_scalers[ticker] = TargetScalerStats(center=center, scale=scale)
 
         x_scaled = x.copy()
-        x_scaled[:, TARGET_IDX] = ((x_scaled[:, TARGET_IDX] - center) / scale).astype(
-            np.float32
-        )
+        x_scaled[:, TARGET_IDX] = ((x_scaled[:, TARGET_IDX] - center) / scale).astype(np.float32)
         tid = ticker_to_id[ticker]
 
         if i_tr > 0:
-            train_a.append(
-                AssetWindows(
-                    ticker=ticker, ticker_id=tid, X=x_scaled[:i_tr], close=close[:i_tr]
-                )
-            )
+            train_a.append(AssetWindows(ticker=ticker, ticker_id=tid, X=x_scaled[:i_tr], close=close[:i_tr]))
         if i_va > i_tr:
-            val_a.append(
-                AssetWindows(
-                    ticker=ticker,
-                    ticker_id=tid,
-                    X=x_scaled[i_tr:i_va],
-                    close=close[i_tr:i_va],
-                )
-            )
+            val_a.append(AssetWindows(ticker=ticker, ticker_id=tid, X=x_scaled[i_tr:i_va], close=close[i_tr:i_va]))
         if n > i_va:
-            test_a.append(
-                AssetWindows(
-                    ticker=ticker, ticker_id=tid, X=x_scaled[i_va:], close=close[i_va:]
-                )
-            )
+            test_a.append(AssetWindows(ticker=ticker, ticker_id=tid, X=x_scaled[i_va:], close=close[i_va:]))
     return train_a, val_a, test_a, ticker_to_id, target_scalers

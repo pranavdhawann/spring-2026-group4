@@ -1,6 +1,5 @@
 """Training loop with early stopping and cosine annealing."""
 from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Tuple
@@ -83,9 +82,7 @@ def train_one_asset(
         lam=cfg.quantile_lambda,
         q=cfg.quantile_q,
     )
-    opt = torch.optim.AdamW(
-        model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
-    )
+    opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg.epochs)
 
     best_val = float("inf")
@@ -118,9 +115,7 @@ def train_one_asset(
             break
 
         if epoch % 5 == 0 or epoch == cfg.epochs - 1:
-            print(
-                f"  epoch {epoch:03d} train={train_loss:.5f} val={val_loss:.5f} best={best_val:.5f}"
-            )
+            print(f"  epoch {epoch:03d} train={train_loss:.5f} val={val_loss:.5f} best={best_val:.5f}")
 
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
     val_pred, val_tgt, _ = _run_eval(model, val_loader, loss_fn, device)

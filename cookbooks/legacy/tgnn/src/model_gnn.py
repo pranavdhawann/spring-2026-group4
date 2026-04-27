@@ -44,7 +44,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.encoders_gnn import NewsEncoder, ReportsEncoder, build_ts_encoder
+from src.encoders_gnn import build_ts_encoder, NewsEncoder, ReportsEncoder
 from src.fusion_gnn import build_fusion
 from src.graph_gnn import CorrelationEdgeBuilder
 from src.loss_gnn import reconstruct_prices
@@ -56,33 +56,25 @@ logger = logging.getLogger(__name__)
 # Temporal GNN Layers
 # ===========================================================================
 
-
 class EvolveGCNBlock(nn.Module):
     """EvolveGCN-H: GRU evolves GCN weight matrices across timesteps."""
 
-    def __init__(
-        self, num_nodes, in_channels, num_layers=3, dropout=0.1, backend="auto"
-    ):
+    def __init__(self, num_nodes, in_channels, num_layers=3, dropout=0.1, backend="auto"):
         super().__init__()
         self.use_evolvegcn = False
 
         if backend in {"auto", "evolvegcn_h"}:
             try:
                 from torch_geometric_temporal.nn.recurrent import EvolveGCNH
-
-                self.layers = nn.ModuleList(
-                    [
-                        EvolveGCNH(num_of_nodes=num_nodes, in_channels=in_channels)
-                        for _ in range(num_layers)
-                    ]
-                )
+                self.layers = nn.ModuleList([
+                    EvolveGCNH(num_of_nodes=num_nodes, in_channels=in_channels)
+                    for _ in range(num_layers)
+                ])
                 # EvolveGCNH stores `weight` as nn.Parameter, but its forward()
                 # reassigns it with a plain tensor from the GRU.  PyTorch ≥2.0
                 # rejects this.  Convert weight to a buffer so reassignment works.
                 for layer in self.layers:
-                    if hasattr(layer, "weight") and isinstance(
-                        layer.weight, nn.Parameter
-                    ):
+                    if hasattr(layer, "weight") and isinstance(layer.weight, nn.Parameter):
                         w_data = layer.weight.data.clone()
                         del layer._parameters["weight"]
                         layer.register_buffer("weight", w_data)
@@ -97,26 +89,19 @@ class EvolveGCNBlock(nn.Module):
                         "falling back to the built-in PyG GCN + GRU temporal block"
                     )
                 else:
-                    logger.info(
-                        "torch_geometric_temporal not installed; using the built-in PyG GCN + GRU temporal block"
-                    )
+                    logger.info("torch_geometric_temporal not installed; using the built-in PyG GCN + GRU temporal block")
         elif backend == "pyg_gcn_gru":
             self._init_pyg_gcn_gru(in_channels, num_layers)
             logger.info("Using the built-in PyG GCN + GRU temporal block")
         else:
             raise ValueError(f"Unknown temporal backend: {backend}")
 
-        self.norms = nn.ModuleList(
-            [nn.LayerNorm(in_channels) for _ in range(num_layers)]
-        )
+        self.norms = nn.ModuleList([nn.LayerNorm(in_channels) for _ in range(num_layers)])
         self.dropout = nn.Dropout(dropout)
 
     def _init_pyg_gcn_gru(self, in_channels, num_layers):
         from torch_geometric.nn import GCNConv
-
-        self.layers = nn.ModuleList(
-            [GCNConv(in_channels, in_channels) for _ in range(num_layers)]
-        )
+        self.layers = nn.ModuleList([GCNConv(in_channels, in_channels) for _ in range(num_layers)])
         self.gru = nn.GRU(in_channels, in_channels, batch_first=True)
 
     def _reset_evolvegcn_state(self):
@@ -188,12 +173,8 @@ class ForecastHead(nn.Module):
     def __init__(self, d_in, horizon=5, dropout=0.1):
         super().__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(d_in, d_in // 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_in // 2, d_in // 4),
-            nn.GELU(),
-            nn.Dropout(dropout),
+            nn.Linear(d_in, d_in // 2), nn.GELU(), nn.Dropout(dropout),
+            nn.Linear(d_in // 2, d_in // 4), nn.GELU(), nn.Dropout(dropout),
             nn.Linear(d_in // 4, horizon),
         )
 
@@ -207,13 +188,10 @@ class DirectionHead(nn.Module):
     Produces logits on a natural scale for BCE, decoupled from the
     regression head so the two losses don't fight over the same output.
     """
-
     def __init__(self, d_in, horizon=5, dropout=0.1):
         super().__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(d_in, d_in // 4),
-            nn.GELU(),
-            nn.Dropout(dropout),
+            nn.Linear(d_in, d_in // 4), nn.GELU(), nn.Dropout(dropout),
             nn.Linear(d_in // 4, horizon),
         )
 
@@ -224,7 +202,6 @@ class DirectionHead(nn.Module):
 # ===========================================================================
 # Full Model
 # ===========================================================================
-
 
 class TemporalGNN(nn.Module):
     def __init__(self, config, max_nodes=550):
@@ -264,18 +241,10 @@ class TemporalGNN(nn.Module):
         # ── Modality Encoders ──
         self.ts_encoder = build_ts_encoder(config)
 
-        news_embed_dim = (
-            768
-            if "minilm" not in data_cfg.get("news_encoder_model", "").lower()
-            else 384
-        )
-        self.news_encoder = NewsEncoder(
-            embedding_dim=news_embed_dim, output_dim=model_cfg.get("d_news", 256)
-        )
+        news_embed_dim = 768 if "minilm" not in data_cfg.get("news_encoder_model", "").lower() else 384
+        self.news_encoder = NewsEncoder(embedding_dim=news_embed_dim, output_dim=model_cfg.get("d_news", 256))
 
-        self.reports_encoder = ReportsEncoder(
-            d_rep=model_cfg.get("d_rep", 256), dropout=model_cfg.get("dropout", 0.1)
-        )
+        self.reports_encoder = ReportsEncoder(d_rep=model_cfg.get("d_rep", 256), dropout=model_cfg.get("dropout", 0.1))
 
         # ── Fusion ──
         self.fusion = build_fusion(config)
@@ -289,9 +258,7 @@ class TemporalGNN(nn.Module):
         # max_nodes; inactive (zero-padded) nodes are graph-isolated (no edges)
         # so they don't corrupt active-node representations via message passing.
         if gnn_type in {"auto", "evolvegcn_h", "pyg_gcn_gru"}:
-            self.temporal_gnn = EvolveGCNBlock(
-                max_nodes, self.d_fused, gnn_layers, dropout, backend=gnn_type
-            )
+            self.temporal_gnn = EvolveGCNBlock(max_nodes, self.d_fused, gnn_layers, dropout, backend=gnn_type)
         else:
             raise ValueError(f"Unknown temporal_gnn: {gnn_type}")
 
@@ -347,9 +314,7 @@ class TemporalGNN(nn.Module):
         E = edge_index.size(1)
         is_self_loop = edge_index[0] == edge_index[1]
         non_self_mask = ~is_self_loop
-        drop_mask = (
-            torch.rand(E, device=edge_index.device) < self.edge_dropout
-        ) & non_self_mask
+        drop_mask = (torch.rand(E, device=edge_index.device) < self.edge_dropout) & non_self_mask
         return edge_index[:, ~drop_mask]
 
     def _encode_modalities(
@@ -360,10 +325,10 @@ class TemporalGNN(nn.Module):
         dev: torch.device,
     ) -> torch.Tensor:
         """Run all modality encoders + fusion for a (N, sub_W, 21) TS slice."""
-        h_ts = self.ts_encoder(ts_feat)  # (N, d_ts)
-        h_news = self.news_encoder(news_aggregates)  # (N, d_news)
-        h_rep = self.reports_encoder(report_feats, device=dev)  # (N, d_rep)
-        return self.fusion(h_ts, h_news, h_rep)  # (N, d_fused)
+        h_ts = self.ts_encoder(ts_feat)                                   # (N, d_ts)
+        h_news = self.news_encoder(news_aggregates)                       # (N, d_news)
+        h_rep = self.reports_encoder(report_feats, device=dev)            # (N, d_rep)
+        return self.fusion(h_ts, h_news, h_rep)                            # (N, d_fused)
 
     def forward(self, sample, device=None):
         """
@@ -402,9 +367,7 @@ class TemporalGNN(nn.Module):
         report_feats: list = []
         for fund_dict in sample["report_fundamentals"]:
             if fund_dict is not None and pred_date is not None:
-                feat = self.reports_encoder.get_point_in_time_features(
-                    fund_dict, pred_date
-                )
+                feat = self.reports_encoder.get_point_in_time_features(fund_dict, pred_date)
                 report_feats.append(feat)
             else:
                 report_feats.append(None)
@@ -419,12 +382,10 @@ class TemporalGNN(nn.Module):
         # Min sub-window length so the TCN has enough receptive field
         # (dilations [1,2,4,8] + kernel 3 → receptive ~31); use max(10, W//K)
         min_sub_w = max(10, W // (K * 2))
-        sub_window_ends = [
-            max(min_sub_w, int(round(W * (k + 1) / K))) for k in range(K)
-        ]
+        sub_window_ends = [max(min_sub_w, int(round(W * (k + 1) / K))) for k in range(K)]
 
         # Precompute the static sector edges once (they don't depend on sub-window).
-        sector_ei = sample["sector_edge_index"].to(dev)  # (2, E_s)
+        sector_ei = sample["sector_edge_index"].to(dev)   # (2, E_s)
 
         # Self-loops over active nodes
         self_loops = torch.arange(N, dtype=torch.long, device=dev)
@@ -440,10 +401,10 @@ class TemporalGNN(nn.Module):
         snapshots: list = []
         for sub_end in sub_window_ends:
             # 3a. Slice TS and run all encoders on the sub-window.
-            ts_sub = ts_feat_full[:, :sub_end, :]  # (N, sub_end, 21)
+            ts_sub = ts_feat_full[:, :sub_end, :]                         # (N, sub_end, 21)
             h_fused_k = self._encode_modalities(
                 ts_sub, news_aggregates, report_feats, dev
-            )  # (N, d_fused)
+            )                                                              # (N, d_fused)
 
             # 3b. Correlation edges on the sub-window's returns.
             # Because returns_dict is short (corr_window), slicing up to
@@ -465,9 +426,7 @@ class TemporalGNN(nn.Module):
                 )
                 corr_ei_k = corr_ei_k.to(dev)
             else:
-                corr_ei_k = sample.get(
-                    "corr_edge_index", torch.zeros(2, 0, dtype=torch.long)
-                ).to(dev)
+                corr_ei_k = sample.get("corr_edge_index", torch.zeros(2, 0, dtype=torch.long)).to(dev)
 
             # 3c. Assemble edges: sector ∪ correlation ∪ self-loops.
             edge_index_k = torch.cat([sector_ei, corr_ei_k, self_loop_ei], dim=1)
@@ -475,9 +434,7 @@ class TemporalGNN(nn.Module):
             edge_index_k = self._apply_edge_dropout(edge_index_k, N)
 
             # 3e. Scatter into max_nodes padded feature tensor.
-            h_padded = torch.zeros(
-                self.max_nodes, self.d_fused, device=dev, dtype=h_fused_k.dtype
-            )
+            h_padded = torch.zeros(self.max_nodes, self.d_fused, device=dev, dtype=h_fused_k.dtype)
             h_padded[:N] = h_fused_k
 
             snapshots.append((h_padded, edge_index_k, None))
@@ -526,8 +483,7 @@ class TemporalGNN(nn.Module):
         last_close = sample["last_close"].to(dev)
 
         return {
-            "log_returns_mean": mean_pred,
-            "log_returns_std": std_pred,
+            "log_returns_mean": mean_pred, "log_returns_std": std_pred,
             "log_returns_lower": mean_pred - 1.96 * std_pred,
             "log_returns_upper": mean_pred + 1.96 * std_pred,
             "price_mean": reconstruct_prices(mean_pred, last_close),

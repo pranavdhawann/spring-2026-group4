@@ -88,9 +88,7 @@ class CombinedLoss(nn.Module):
         if self.loss_type == "huber":
             # F.huber_loss uses 'mean' reduction by default.
             # delta controls the transition from quadratic to linear.
-            return F.huber_loss(
-                pred_lr, target_lr, delta=self.huber_delta, reduction="mean"
-            )
+            return F.huber_loss(pred_lr, target_lr, delta=self.huber_delta, reduction="mean")
         elif self.loss_type == "smooth_l1":
             # Alias for Huber with beta=1 (PyTorch's SmoothL1 uses 'beta' not 'delta').
             return F.smooth_l1_loss(pred_lr, target_lr, reduction="mean")
@@ -189,12 +187,8 @@ class CombinedLoss(nn.Module):
         else:
             var_loss = torch.zeros((), device=pred_lr.device, dtype=pred_lr.dtype)
 
-        total = (
-            self.alpha * lr_loss
-            + self.beta * price_loss
-            + self.gamma * direction_loss
-            + self.delta * var_loss
-        )
+        total = (self.alpha * lr_loss + self.beta * price_loss
+                 + self.gamma * direction_loss + self.delta * var_loss)
 
         components = {
             "lr_loss": lr_loss.item(),
@@ -213,16 +207,16 @@ def reconstruct_prices(
 ) -> torch.Tensor:
     """
     Convert log-return forecasts back to close prices.
-
+    
     Args:
         log_returns: (N, H) predicted log returns for t+1..t+H
         last_close:  (N, 1) or (N,) last known close price at time t
-
+    
     Returns:
         (N, H) predicted close prices
     """
     if last_close.dim() == 1:
         last_close = last_close.unsqueeze(-1)  # (N, 1)
-
+    
     cum_returns = torch.cumsum(log_returns, dim=-1)  # (N, H)
-    return last_close * torch.exp(cum_returns)  # (N, H)
+    return last_close * torch.exp(cum_returns)        # (N, H)

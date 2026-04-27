@@ -22,15 +22,7 @@ def preprocessTabNetMMBaseline(
     table_cols = pre.get("table_cols")
     text_dim = pre.get("text_dim") or 64
     if ts_cols is None:
-        ts_cols = [
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume",
-            "dividends",
-            "stock splits",
-        ]
+        ts_cols = ["open", "high", "low", "close", "volume", "dividends", "stock splits"]
     if table_cols is None:
         table_cols = [
             "us-gaap_Assets",
@@ -76,9 +68,7 @@ def preprocessTabNetMMBaseline(
         last = table_data[-1]
         for i, col in enumerate(table_cols):
             v = last.get(col)
-            table_feats[i] = (
-                float(v) if v is not None and isinstance(v, (int, float)) else 0.0
-            )
+            table_feats[i] = float(v) if v is not None and isinstance(v, (int, float)) else 0.0
 
     out = np.concatenate([text_feats, ts_feats, table_feats]).astype(np.float32)
     if verbose:

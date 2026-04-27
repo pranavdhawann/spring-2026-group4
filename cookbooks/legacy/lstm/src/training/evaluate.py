@@ -10,9 +10,7 @@ import torch
 import torch.nn as nn
 
 
-def predict(
-    model: nn.Module, X: np.ndarray, device: str, batch_size: int = 256
-) -> np.ndarray:
+def predict(model: nn.Module, X: np.ndarray, device: str, batch_size: int = 256) -> np.ndarray:
     model.eval()
     device = torch.device(device)
     model.to(device)
@@ -44,17 +42,13 @@ def _per_horizon_metrics(
             {
                 "horizon": f"day+{h + 1}",
                 "MAE_scaled": float(np.mean(np.abs(err_scaled))),
-                "MSE_scaled": float(np.mean(err_scaled**2)),
-                "RMSE_scaled": math.sqrt(float(np.mean(err_scaled**2))),
-                "MAPE_scaled_%": float(
-                    np.nanmean(np.abs(err_scaled / denom_scaled)) * 100.0
-                ),
+                "MSE_scaled": float(np.mean(err_scaled ** 2)),
+                "RMSE_scaled": math.sqrt(float(np.mean(err_scaled ** 2))),
+                "MAPE_scaled_%": float(np.nanmean(np.abs(err_scaled / denom_scaled)) * 100.0),
                 "MAE_original": float(np.mean(np.abs(err_original))),
-                "MSE_original": float(np.mean(err_original**2)),
-                "RMSE_original": math.sqrt(float(np.mean(err_original**2))),
-                "MAPE_original_%": float(
-                    np.nanmean(np.abs(err_original / denom_original)) * 100.0
-                ),
+                "MSE_original": float(np.mean(err_original ** 2)),
+                "RMSE_original": math.sqrt(float(np.mean(err_original ** 2))),
+                "MAPE_original_%": float(np.nanmean(np.abs(err_original / denom_original)) * 100.0),
             }
         )
     return pd.DataFrame(rows)
@@ -91,9 +85,7 @@ def evaluate(
     preds_original = splits.target_scaler.inverse_transform(preds_scaled)
     truth_original = splits.target_scaler.inverse_transform(truth_scaled)
 
-    metrics = _per_horizon_metrics(
-        preds_scaled, truth_scaled, preds_original, truth_original
-    )
+    metrics = _per_horizon_metrics(preds_scaled, truth_scaled, preds_original, truth_original)
     if plot_path is not None:
         _plot(preds_original, truth_original, Path(plot_path))
     return metrics

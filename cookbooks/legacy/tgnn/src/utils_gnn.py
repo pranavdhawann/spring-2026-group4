@@ -75,7 +75,6 @@ def resolve_data_path(
 # Logging
 # ---------------------------------------------------------------------------
 
-
 def _resolve_log_level(level_name, default=logging.INFO):
     if isinstance(level_name, int):
         return level_name
@@ -84,12 +83,8 @@ def _resolve_log_level(level_name, default=logging.INFO):
     return getattr(logging, str(level_name).upper(), default)
 
 
-def setup_logging(
-    config: Optional[dict] = None,
-    command_name: str = "app",
-    config_path: Optional[str] = None,
-    args=None,
-) -> str:
+def setup_logging(config: Optional[dict] = None, command_name: str = "app", config_path: Optional[str] = None,
+                  args=None) -> str:
     """
     Configure project-wide logging with both console and per-run file handlers.
 
@@ -113,33 +108,23 @@ def setup_logging(
             pass
 
     root_logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s")
 
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(
-        _resolve_log_level(log_cfg.get("console_level", log_cfg.get("level", "INFO")))
-    )
+    console_handler.setLevel(_resolve_log_level(log_cfg.get("console_level", log_cfg.get("level", "INFO"))))
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(
-        _resolve_log_level(log_cfg.get("file_level", "DEBUG"), logging.DEBUG)
-    )
+    file_handler.setLevel(_resolve_log_level(log_cfg.get("file_level", "DEBUG"), logging.DEBUG))
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
 
     if log_cfg.get("capture_warnings", True):
         logging.captureWarnings(True)
 
-    logging.getLogger("matplotlib").setLevel(
-        _resolve_log_level(log_cfg.get("matplotlib_level", "WARNING"))
-    )
-    logging.getLogger("urllib3").setLevel(
-        _resolve_log_level(log_cfg.get("urllib3_level", "WARNING"))
-    )
+    logging.getLogger("matplotlib").setLevel(_resolve_log_level(log_cfg.get("matplotlib_level", "WARNING")))
+    logging.getLogger("urllib3").setLevel(_resolve_log_level(log_cfg.get("urllib3_level", "WARNING")))
 
     def _log_uncaught_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
@@ -166,9 +151,7 @@ def setup_logging(
     return log_path
 
 
-def log_runtime_context(
-    command_name: str, config: Optional[dict] = None, extra: Optional[dict] = None
-):
+def log_runtime_context(command_name: str, config: Optional[dict] = None, extra: Optional[dict] = None):
     """Log environment and configuration details for the current run."""
     logger.info("Command: %s", command_name)
     logger.info("Working directory: %s", os.getcwd())
@@ -177,10 +160,7 @@ def log_runtime_context(
 
     try:
         import torch
-
-        cuda_name = (
-            torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-        )
+        cuda_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
         logger.info(
             "Torch runtime: version=%s | cuda_available=%s | device=%s",
             torch.__version__,
@@ -220,7 +200,6 @@ def log_runtime_context(
 # Reproducibility
 # ---------------------------------------------------------------------------
 
-
 def set_seed(seed: int = 42, deterministic: bool = True):
     """Set all random seeds for reproducibility."""
     random.seed(seed)
@@ -237,7 +216,6 @@ def set_seed(seed: int = 42, deterministic: bool = True):
 # Trading Calendar
 # ---------------------------------------------------------------------------
 
-
 def build_trading_calendar(
     start_date: str = "2000-01-01",
     end_date: str = "2026-12-31",
@@ -249,30 +227,22 @@ def build_trading_calendar(
     """
     try:
         import pandas_market_calendars as mcal
-
         nyse = mcal.get_calendar("NYSE")
         schedule = nyse.schedule(start_date=start_date, end_date=end_date)
         trading_days = schedule.index
-        logger.info(
-            f"Built NYSE trading calendar: {len(trading_days)} days "
-            f"({trading_days[0].date()} to {trading_days[-1].date()})"
-        )
+        logger.info(f"Built NYSE trading calendar: {len(trading_days)} days "
+                     f"({trading_days[0].date()} to {trading_days[-1].date()})")
         return trading_days
     except ImportError:
-        logger.warning(
-            "pandas_market_calendars not available; using pd.bdate_range as fallback"
-        )
+        logger.warning("pandas_market_calendars not available; using pd.bdate_range as fallback")
         from pandas.tseries.holiday import USFederalHolidayCalendar
         from pandas.tseries.offsets import CustomBusinessDay
-
         us_bd = CustomBusinessDay(calendar=USFederalHolidayCalendar())
         trading_days = pd.date_range(start=start_date, end=end_date, freq=us_bd)
         return trading_days
 
 
-def get_next_trading_day(
-    date: pd.Timestamp, trading_calendar: pd.DatetimeIndex
-) -> pd.Timestamp:
+def get_next_trading_day(date: pd.Timestamp, trading_calendar: pd.DatetimeIndex) -> pd.Timestamp:
     """Return the next trading day on or after `date`."""
     mask = trading_calendar >= date
     if mask.any():
@@ -280,9 +250,7 @@ def get_next_trading_day(
     raise ValueError(f"No trading day found on or after {date}")
 
 
-def get_prev_trading_day(
-    date: pd.Timestamp, trading_calendar: pd.DatetimeIndex
-) -> pd.Timestamp:
+def get_prev_trading_day(date: pd.Timestamp, trading_calendar: pd.DatetimeIndex) -> pd.Timestamp:
     """Return the most recent trading day on or before `date`."""
     mask = trading_calendar <= date
     if mask.any():
@@ -293,10 +261,10 @@ def get_prev_trading_day(
 def build_master_calendar(ticker_dfs: dict) -> pd.DatetimeIndex:
     """
     Build a master calendar from the union of all tickers' trading dates.
-
+    
     Args:
         ticker_dfs: dict mapping ticker -> DataFrame with 'date' column
-
+    
     Returns:
         Sorted DatetimeIndex of all unique trading dates
     """
@@ -305,18 +273,15 @@ def build_master_calendar(ticker_dfs: dict) -> pd.DatetimeIndex:
         dates = pd.to_datetime(df["date"])
         all_dates.update(dates.tolist())
     master = pd.DatetimeIndex(sorted(all_dates))
-    logger.info(
-        f"Master calendar: {len(master)} trading days "
-        f"({master[0].date()} to {master[-1].date()}) "
-        f"from {len(ticker_dfs)} tickers"
-    )
+    logger.info(f"Master calendar: {len(master)} trading days "
+                 f"({master[0].date()} to {master[-1].date()}) "
+                 f"from {len(ticker_dfs)} tickers")
     return master
 
 
 # ---------------------------------------------------------------------------
 # Date / News Alignment
 # ---------------------------------------------------------------------------
-
 
 def assign_news_to_trading_day(
     article_date: pd.Timestamp,
@@ -326,43 +291,39 @@ def assign_news_to_trading_day(
 ) -> pd.Timestamp:
     """
     Assign a news article to the correct trading day based on publication time.
-
+    
     Rules:
         - Weekday before cutoff (default 16:00 ET) → current trading day
         - Weekday after cutoff → next trading day
         - Weekend / holiday → next trading day
         - Pre-market (before 9:30am) → current trading day
-
+    
     Args:
         article_date: Publication datetime (assumed ET timezone)
         trading_calendar: Sorted DatetimeIndex of trading days
         cutoff_hour: Hour of cutoff time (ET)
         cutoff_minute: Minute of cutoff time (ET)
-
+    
     Returns:
         Trading day pd.Timestamp to which this article should be assigned
     """
     date_only = pd.Timestamp(article_date.date())
-
+    
     # Check if it's a trading day
     is_trading_day = date_only in trading_calendar
-
+    
     if is_trading_day:
         # Check if article is after cutoff
-        if hasattr(article_date, "hour"):
+        if hasattr(article_date, 'hour'):
             article_hour = article_date.hour
             article_minute = article_date.minute
         else:
             # Date only — assume before cutoff
             return date_only
-
-        if article_hour > cutoff_hour or (
-            article_hour == cutoff_hour and article_minute >= cutoff_minute
-        ):
+        
+        if article_hour > cutoff_hour or (article_hour == cutoff_hour and article_minute >= cutoff_minute):
             # After cutoff → next trading day
-            return get_next_trading_day(
-                date_only + pd.Timedelta(days=1), trading_calendar
-            )
+            return get_next_trading_day(date_only + pd.Timedelta(days=1), trading_calendar)
         else:
             return date_only
     else:
@@ -373,7 +334,6 @@ def assign_news_to_trading_day(
 # ---------------------------------------------------------------------------
 # Feature Computation Helpers
 # ---------------------------------------------------------------------------
-
 
 def compute_log_returns(close: pd.Series) -> pd.Series:
     """Compute log returns: log(close_t / close_{t-1})."""
@@ -423,7 +383,10 @@ def clip_log_returns(log_returns: pd.Series, sigma: float = 5.0) -> pd.Series:
 
     median_expanding = valid.expanding(min_periods=min_periods).median()
     mad_expanding = (
-        (valid - median_expanding).abs().expanding(min_periods=min_periods).median()
+        (valid - median_expanding)
+        .abs()
+        .expanding(min_periods=min_periods)
+        .median()
     )
 
     # 0.6745 converts MAD to σ-equivalent scale
@@ -454,22 +417,21 @@ def expanding_zscore(
     """
     exp_mean = series.expanding(min_periods=min_periods).mean()
     exp_std = series.expanding(min_periods=min_periods).std()
-
+    
     # Replace NaN periods with global stats if available
     if global_mean is not None and global_std is not None:
         exp_mean = exp_mean.fillna(global_mean)
         exp_std = exp_std.fillna(global_std)
-
+    
     # Avoid division by zero
     exp_std = exp_std.replace(0, 1e-8)
-
+    
     return (series - exp_mean) / exp_std
 
 
 # ---------------------------------------------------------------------------
 # Data Split
 # ---------------------------------------------------------------------------
-
 
 def temporal_train_val_test_split(
     master_calendar: pd.DatetimeIndex,
@@ -479,39 +441,33 @@ def temporal_train_val_test_split(
 ) -> Tuple[pd.DatetimeIndex, pd.DatetimeIndex, pd.DatetimeIndex]:
     """
     Temporal split with purge gaps.
-
+    
     |◄──── Train ─────►|◄─purge─►|◄── Val ──►|◄─purge─►|◄── Test ──►|
-
+    
     Returns:
         (train_dates, val_dates, test_dates)
     """
     n = len(master_calendar)
-
+    
     test_start = n - test_days
     val_end = test_start - purge_days
     val_start = val_end - val_days
     train_end = val_start - purge_days
-
+    
     if train_end <= 0:
         raise ValueError(
             f"Not enough data for split: {n} total days, need at least "
             f"{val_days + test_days + 2 * purge_days + 1} days"
         )
-
+    
     train_dates = master_calendar[:train_end]
     val_dates = master_calendar[val_start:val_end]
     test_dates = master_calendar[test_start:]
-
-    logger.info(
-        f"Train: {len(train_dates)} days ({train_dates[0].date()} to {train_dates[-1].date()})"
-    )
-    logger.info(
-        f"Val:   {len(val_dates)} days ({val_dates[0].date()} to {val_dates[-1].date()})"
-    )
-    logger.info(
-        f"Test:  {len(test_dates)} days ({test_dates[0].date()} to {test_dates[-1].date()})"
-    )
-
+    
+    logger.info(f"Train: {len(train_dates)} days ({train_dates[0].date()} to {train_dates[-1].date()})")
+    logger.info(f"Val:   {len(val_dates)} days ({val_dates[0].date()} to {val_dates[-1].date()})")
+    logger.info(f"Test:  {len(test_dates)} days ({test_dates[0].date()} to {test_dates[-1].date()})")
+    
     return train_dates, val_dates, test_dates
 
 
@@ -519,11 +475,9 @@ def temporal_train_val_test_split(
 # Config Loading
 # ---------------------------------------------------------------------------
 
-
 def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
     """Load YAML configuration file."""
     import yaml
-
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     return config
@@ -532,7 +486,6 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
 # ---------------------------------------------------------------------------
 # Checkpoint Utilities
 # ---------------------------------------------------------------------------
-
 
 def save_checkpoint(
     model,
@@ -557,12 +510,10 @@ def save_checkpoint(
         state["scaler_state_dict"] = scaler.state_dict()
     if extra:
         state.update(extra)
-
+    
     os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save(state, path)
-    logger.info(
-        f"Saved checkpoint to {path} (epoch={epoch}, val_metric={val_metric:.6f})"
-    )
+    logger.info(f"Saved checkpoint to {path} (epoch={epoch}, val_metric={val_metric:.6f})")
 
 
 def load_checkpoint(path: str, model, optimizer=None, scheduler=None, scaler=None):
@@ -590,7 +541,6 @@ def load_checkpoint(path: str, model, optimizer=None, scheduler=None, scaler=Non
 # ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
-
 
 def count_parameters(model) -> int:
     """Count total and trainable parameters."""

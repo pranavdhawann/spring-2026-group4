@@ -7,7 +7,6 @@ from src.utils import set_seed
 
 try:
     from pytorch_tabnet.tab_model import TabNetRegressor
-
     _TABNET_AVAILABLE = True
 except ImportError:
     TabNetRegressor = None
@@ -15,13 +14,13 @@ except ImportError:
 
 
 class TabNetForecasting:
+
     def __init__(self, config: Dict):
         if not _TABNET_AVAILABLE:
             raise ImportError(
                 "pytorch-tabnet is required. Install with: pip install pytorch-tabnet"
             )
         import random
-
         seed = config.get("seed", 42)
         random.seed(seed)
         np.random.seed(seed)
@@ -52,6 +51,7 @@ class TabNetForecasting:
         X_val: Optional[np.ndarray] = None,
         y_val: Optional[np.ndarray] = None,
     ) -> "TabNetForecasting":
+
         input_dim = X_train.shape[1]
         output_dim = y_train.shape[1] if y_train.ndim > 1 else 1
         if output_dim == 1 and y_train.ndim == 1:
@@ -97,7 +97,6 @@ class TabNetForecasting:
         self.model.load_model(path)
         self._fitted = True
         return self
-
 
 if __name__ == "__main__":
     np.random.seed(42)

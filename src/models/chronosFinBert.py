@@ -83,16 +83,12 @@ class ChronosFinBert(nn.Module):
             hidden_size=self.config["lstm_hidden"],
             num_layers=self.config["lstm_num_layers"],
             batch_first=True,
-            dropout=self.config["dropout_rate"]
-            if self.config["lstm_num_layers"] > 1
-            else 0,
+            dropout=self.config["dropout_rate"] if self.config["lstm_num_layers"] > 1 else 0,
         )
 
         # ── Head ──────────────────────────────────────────────────────────
         self.dropout = nn.Dropout(self.config["dropout_rate"])
-        self.head = nn.Linear(
-            self.config["lstm_hidden"], self.config["FORECAST_HORIZON"]
-        )
+        self.head = nn.Linear(self.config["lstm_hidden"], self.config["FORECAST_HORIZON"])
 
         nn.init.xavier_uniform_(self.ts_projection.weight)
         nn.init.xavier_uniform_(self.news_projection.weight)
@@ -119,12 +115,10 @@ class ChronosFinBert(nn.Module):
     # ── Forward ───────────────────────────────────────────────────────────
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> torch.Tensor:
-        input_ids = inputs["input_ids"]  # (B, W, L)
+        input_ids = inputs["input_ids"]        # (B, W, L)
         attention_mask = inputs["attention_mask"]  # (B, W, L)
-        closes = inputs["closes"]  # (B, N)
-        extra_features = inputs[
-            "extra_features"
-        ]  # (B, 2)  # noqa: F841 — kept for API compatibility
+        closes = inputs["closes"]               # (B, N)
+        extra_features = inputs["extra_features"]  # (B, 2)  # noqa: F841 — kept for API compatibility
 
         B, W, L = input_ids.shape
         N = closes.shape[1]
@@ -140,14 +134,14 @@ class ChronosFinBert(nn.Module):
 
         # ── FinBERT: encode ALL non-empty news windows → sequence of CLS embeddings ─
         # is_empty: (B, W) — True where window has no real tokens
-        is_empty = self.is_empty_news(input_ids)  # (B, W)
+        is_empty = self.is_empty_news(input_ids)   # (B, W)
         # news_seq: (B, W, bert_hidden_dim) — CLS embedding per window, zero for empty
         news_seq = torch.zeros(B, W, self.config["bert_hidden_dim"], device=self.device)
 
         # Flatten all non-empty (batch, window) pairs and run FinBERT in one pass
-        non_empty_b, non_empty_w = torch.where(~is_empty)  # each shape (M,)
+        non_empty_b, non_empty_w = torch.where(~is_empty)   # each shape (M,)
         if non_empty_b.numel() > 0:
-            flat_input_ids = input_ids[non_empty_b, non_empty_w]  # (M, L)
+            flat_input_ids      = input_ids[non_empty_b, non_empty_w]       # (M, L)
             flat_attention_mask = attention_mask[non_empty_b, non_empty_w]  # (M, L)
 
             with autocast(device_type="cuda"):
@@ -157,7 +151,7 @@ class ChronosFinBert(nn.Module):
                 )
 
             cls_embeddings = bert_outputs.last_hidden_state[:, 0, :]  # (M, 768)
-            news_seq[non_empty_b, non_empty_w] = cls_embeddings  # scatter back
+            news_seq[non_empty_b, non_empty_w] = cls_embeddings        # scatter back
 
         news_proj = self.news_projection(news_seq)  # (B, W, d_fusion)
 
@@ -171,6 +165,6 @@ class ChronosFinBert(nn.Module):
 
         # ── Prediction head ───────────────────────────────────────────────
         out = self.dropout(last_hidden)
-        predictions = self.head(out)  # (B, FORECAST_HORIZON)
+        predictions = self.head(out)    # (B, FORECAST_HORIZON)
 
         return predictions

@@ -20,14 +20,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.dataset_gnn import build_dataloaders
-from src.loss_gnn import CombinedLoss
-from src.model_gnn import TemporalGNN
 from src.utils_gnn import (
-    DEFAULT_CHECKPOINT_DIR,
-    DEFAULT_CONFIG_PATH,
-    DEFAULT_TENSORBOARD_DIR,
     count_parameters,
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_CHECKPOINT_DIR,
+    DEFAULT_TENSORBOARD_DIR,
     get_device,
     load_config,
     log_runtime_context,
@@ -35,6 +32,9 @@ from src.utils_gnn import (
     set_seed,
     setup_logging,
 )
+from src.dataset_gnn import build_dataloaders
+from src.loss_gnn import CombinedLoss
+from src.model_gnn import TemporalGNN
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,6 @@ def make_grad_scaler(device_type: str, enabled: bool):
     if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
         return torch.amp.GradScaler(device_type)
     from torch.cuda.amp import GradScaler
-
     return GradScaler()
 
 
@@ -57,17 +56,12 @@ def amp_autocast(device_type: str, enabled: bool):
     if hasattr(torch, "amp") and hasattr(torch.amp, "autocast"):
         return torch.amp.autocast(device_type=device_type, enabled=True)
     from torch.cuda.amp import autocast
-
     return autocast(enabled=True)
 
 
 class CosineWithWarmup:
     def __init__(self, optimizer, warmup_steps, total_steps, lr_min=1e-6):
-        self.optimizer, self.warmup_steps, self.total_steps = (
-            optimizer,
-            warmup_steps,
-            total_steps,
-        )
+        self.optimizer, self.warmup_steps, self.total_steps = optimizer, warmup_steps, total_steps
         self.lr_min = lr_min
         self.base_lrs = [pg["lr"] for pg in optimizer.param_groups]
         self.step_count = 0
@@ -77,9 +71,7 @@ class CosineWithWarmup:
         if self.step_count <= self.warmup_steps:
             scale = self.step_count / max(1, self.warmup_steps)
         else:
-            progress = (self.step_count - self.warmup_steps) / max(
-                1, self.total_steps - self.warmup_steps
-            )
+            progress = (self.step_count - self.warmup_steps) / max(1, self.total_steps - self.warmup_steps)
             scale = 0.5 * (1 + np.cos(np.pi * progress))
         for pg, base_lr in zip(self.optimizer.param_groups, self.base_lrs):
             pg["lr"] = max(self.lr_min, base_lr * scale)
@@ -105,9 +97,8 @@ def train_one_step(model, sample, criterion, device):
     targets = sample["targets"].to(device)
     target_close = sample["target_close"].to(device)
 
-    loss, components = criterion(
-        pred_lr, targets, pred_close, target_close, direction_logits=direction_logits
-    )
+    loss, components = criterion(pred_lr, targets, pred_close, target_close,
+                                 direction_logits=direction_logits)
     return loss, components, pred_lr.detach()
 
 
@@ -130,13 +121,8 @@ def validate(model, val_loader, criterion, device):
         target_close = sample["target_close"].to(device)
 
         direction_logits = output.get("direction_logits")
-        loss, components = criterion(
-            pred_lr,
-            targets,
-            output["pred_close"],
-            target_close,
-            direction_logits=direction_logits,
-        )
+        loss, components = criterion(pred_lr, targets, output["pred_close"], target_close,
+                                     direction_logits=direction_logits)
         if loss is None:
             continue
 
@@ -161,12 +147,8 @@ def validate(model, val_loader, criterion, device):
         target_cat = torch.cat(all_target_lr)
         metrics["val_mae_log_return"] = (pred_cat - target_cat).abs().mean().item()
         for h in range(pred_cat.size(1)):
-            metrics[f"val_mae_h{h+1}"] = (
-                (pred_cat[:, h] - target_cat[:, h]).abs().mean().item()
-            )
-        metrics["val_directional_acc"] = (
-            ((pred_cat > 0) == (target_cat > 0)).float().mean().item()
-        )
+            metrics[f"val_mae_h{h+1}"] = (pred_cat[:, h] - target_cat[:, h]).abs().mean().item()
+        metrics["val_directional_acc"] = ((pred_cat > 0) == (target_cat > 0)).float().mean().item()
         # Collapse diagnostics: if pred_std ≪ target_std the model is predicting a constant.
         metrics["val_pred_mean"] = pred_cat.mean().item()
         metrics["val_pred_std"] = pred_cat.std().item()
@@ -184,9 +166,7 @@ def init_tracker(config, run_name="default"):
     log_cfg = config.get("logging", {})
     backend = log_cfg.get("backend", "tensorboard")
     if backend == "wandb":
-        wandb_mode = str(
-            os.getenv("WANDB_MODE", log_cfg.get("wandb_mode", "offline"))
-        ).lower()
+        wandb_mode = str(os.getenv("WANDB_MODE", log_cfg.get("wandb_mode", "offline"))).lower()
         if wandb_mode not in {"online", "offline", "disabled"}:
             logger.warning("Unknown W&B mode '%s'; defaulting to offline", wandb_mode)
             wandb_mode = "offline"
@@ -197,40 +177,29 @@ def init_tracker(config, run_name="default"):
             return None
         try:
             import wandb
-
             wandb.init(
                 project=log_cfg.get("project", "tgnn-stock-forecast"),
                 config=config,
                 name=run_name,
                 mode=wandb_mode,
             )
-            logger.info(
-                "Initialized Weights & Biases tracker with run name %s in %s mode",
-                run_name,
-                wandb_mode,
-            )
+            logger.info("Initialized Weights & Biases tracker with run name %s in %s mode", run_name, wandb_mode)
             return "wandb"
         except ImportError:
-            logger.warning(
-                "wandb requested but not installed; continuing without wandb tracking"
-            )
+            logger.warning("wandb requested but not installed; continuing without wandb tracking")
     try:
         from torch.utils.tensorboard import SummaryWriter
-
         tb_dir = os.path.join(DEFAULT_TENSORBOARD_DIR, run_name)
         logger.info("Initialized TensorBoard tracker at %s", tb_dir)
         return SummaryWriter(log_dir=tb_dir)
     except ImportError:
-        logger.warning(
-            "No experiment tracker available (wandb/tensorboard unavailable)"
-        )
+        logger.warning("No experiment tracker available (wandb/tensorboard unavailable)")
         return None
 
 
 def log_metrics(tracker, metrics, step, prefix=""):
     if tracker == "wandb":
         import wandb
-
         wandb.log({f"{prefix}{k}": v for k, v in metrics.items()}, step=step)
     elif hasattr(tracker, "add_scalar"):
         for k, v in metrics.items():
@@ -255,9 +224,7 @@ def train(config, run_name="default"):
 
     logger.info("Building data loaders...")
     train_loader, val_loader, test_loader, metadata = build_dataloaders(config)
-    logger.info(
-        f"Train: {metadata['train_samples']}, Val: {metadata['val_samples']}, Test: {metadata['test_samples']}"
-    )
+    logger.info(f"Train: {metadata['train_samples']}, Val: {metadata['val_samples']}, Test: {metadata['test_samples']}")
 
     # Initialize model and compute report normalization stats
     model = TemporalGNN(config, max_nodes=metadata.get("max_nodes", 550)).to(device)
@@ -265,11 +232,8 @@ def train(config, run_name="default"):
         model.reports_encoder.compute_normalization_stats(metadata["fundamentals"])
     count_parameters(model)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=train_cfg.get("lr", 1e-4),
-        weight_decay=train_cfg.get("weight_decay", 1e-5),
-    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=train_cfg.get("lr", 1e-4),
+                                   weight_decay=train_cfg.get("weight_decay", 1e-5))
 
     grad_accum = train_cfg.get("grad_accumulation_steps", 8)
 
@@ -281,12 +245,8 @@ def train(config, run_name="default"):
     # making warmup last several epochs and the cosine decay far too slow.
     steps_per_epoch = int(np.ceil(metadata["train_samples"] / grad_accum))
     total_steps = steps_per_epoch * train_cfg.get("max_epochs", 100)
-    scheduler = CosineWithWarmup(
-        optimizer,
-        int(total_steps * train_cfg.get("warmup_ratio", 0.05)),
-        total_steps,
-        train_cfg.get("lr_min", 1e-6),
-    )
+    scheduler = CosineWithWarmup(optimizer, int(total_steps * train_cfg.get("warmup_ratio", 0.05)),
+                                  total_steps, train_cfg.get("lr_min", 1e-6))
 
     # NOTE: batch_size=1 (one date per sample) with grad_accumulation_steps
     # gives effective_batch = grad_accum dates, each containing ~100 stocks.
@@ -304,11 +264,7 @@ def train(config, run_name="default"):
     )
 
     amp_device_type = device.type if isinstance(device, torch.device) else str(device)
-    use_amp = (
-        train_cfg.get("mixed_precision", True)
-        and amp_device_type == "cuda"
-        and torch.cuda.is_available()
-    )
+    use_amp = train_cfg.get("mixed_precision", True) and amp_device_type == "cuda" and torch.cuda.is_available()
     scaler = make_grad_scaler(amp_device_type, use_amp)
     max_grad_norm = train_cfg.get("gradient_clip", 1.0)
     patience = train_cfg.get("early_stopping_patience", 10)
@@ -326,48 +282,35 @@ def train(config, run_name="default"):
     logger.info("=" * 70)
     logger.info(
         "Dataset      | train_samples=%d | val_samples=%d | test_samples=%d",
-        metadata["train_samples"],
-        metadata["val_samples"],
-        metadata["test_samples"],
+        metadata["train_samples"], metadata["val_samples"], metadata["test_samples"],
     )
     logger.info(
         "Batching     | batch_size=1 (one date/sample) | grad_accum=%d | "
         "effective_batch=%d dates x ~%d stocks = ~%d stock-date pairs",
-        grad_accum,
-        grad_accum,
+        grad_accum, grad_accum,
         metadata.get("num_tickers", 100),
         grad_accum * metadata.get("num_tickers", 100),
     )
     logger.info(
         "Schedule     | steps_per_epoch=%d | total_steps=%d | warmup_steps=%d (%.1f%%) | max_epochs=%d",
-        steps_per_epoch,
-        total_steps,
-        warmup_steps,
-        100.0 * warmup_steps / max(1, total_steps),
-        max_epochs,
+        steps_per_epoch, total_steps, warmup_steps,
+        100.0 * warmup_steps / max(1, total_steps), max_epochs,
     )
     logger.info(
         "LR           | peak=%.2e | min=%.2e | warmup_ratio=%.3f | schedule=cosine",
-        train_cfg.get("lr", 1e-4),
-        train_cfg.get("lr_min", 1e-6),
-        train_cfg.get("warmup_ratio", 0.05),
+        train_cfg.get("lr", 1e-4), train_cfg.get("lr_min", 1e-6), train_cfg.get("warmup_ratio", 0.05),
     )
     logger.info(
         "Optimizer    | AdamW | weight_decay=%.1e | gradient_clip=%.1f | mixed_precision=%s",
-        train_cfg.get("weight_decay", 1e-5),
-        max_grad_norm,
-        use_amp,
+        train_cfg.get("weight_decay", 1e-5), max_grad_norm, use_amp,
     )
     logger.info(
         "Early stop   | patience=%d | metric=%s | checkpoint_dir=%s",
-        patience,
-        es_metric,
-        os.path.abspath(ckpt_dir),
+        patience, es_metric, os.path.abspath(ckpt_dir),
     )
     logger.info(
         "Tickers      | num_tickers=%d | max_nodes=%d",
-        metadata["num_tickers"],
-        metadata.get("max_nodes", 550),
+        metadata["num_tickers"], metadata.get("max_nodes", 550),
     )
     logger.info(
         "Loss         | type=%s | huber_delta=%.4f | alpha=%.2f | beta=%.2f | gamma=%.3f | "
@@ -402,13 +345,9 @@ def train(config, run_name="default"):
 
             if use_amp:
                 with amp_autocast(amp_device_type, enabled=True):
-                    loss, components, pred_lr_dbg = train_one_step(
-                        model, sample, criterion, device
-                    )
+                    loss, components, pred_lr_dbg = train_one_step(model, sample, criterion, device)
             else:
-                loss, components, pred_lr_dbg = train_one_step(
-                    model, sample, criterion, device
-                )
+                loss, components, pred_lr_dbg = train_one_step(model, sample, criterion, device)
 
             if loss is None:
                 skipped_none += 1
@@ -430,15 +369,11 @@ def train(config, run_name="default"):
             if accum_count >= grad_accum:
                 if use_amp:
                     scaler.unscale_(optimizer)
-                    grad_norm = nn.utils.clip_grad_norm_(
-                        model.parameters(), max_grad_norm
-                    )
+                    grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    grad_norm = nn.utils.clip_grad_norm_(
-                        model.parameters(), max_grad_norm
-                    )
+                    grad_norm = nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                     optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
@@ -449,9 +384,7 @@ def train(config, run_name="default"):
                         "Step %d | epoch=%d | loss=%.5f | lr=%.3e | grad_norm=%.3f | "
                         "lr_l=%.5f price_l=%.5f dir_l=%.5f var_l=%.5f | "
                         "pred_mean=%+.2e pred_std=%.2e | tgt_std=%.2e",
-                        global_step,
-                        epoch,
-                        loss.item(),
+                        global_step, epoch, loss.item(),
                         optimizer.param_groups[0]["lr"],
                         float(grad_norm),
                         components.get("lr_loss", 0.0),
@@ -487,9 +420,7 @@ def train(config, run_name="default"):
             "Epoch %d/%d | train_loss=%.4f | val_loss=%.4f | val_MAE=%.4f | "
             "dir_acc=%.2f%% | corr=%+.4f | pred_std=%.2e tgt_std=%.2e | "
             "lr=%.2e | time=%.1fs",
-            epoch,
-            max_epochs,
-            train_loss,
+            epoch, max_epochs, train_loss,
             val_metrics.get("val_loss", float("inf")),
             val_metrics.get("val_mae_log_return", float("inf")),
             val_metrics.get("val_directional_acc", 0) * 100,
@@ -511,12 +442,7 @@ def train(config, run_name="default"):
             )
 
         if tracker:
-            log_metrics(
-                tracker,
-                {**{"train_loss": train_loss}, **val_metrics},
-                global_step,
-                "epoch/",
-            )
+            log_metrics(tracker, {**{"train_loss": train_loss}, **val_metrics}, global_step, "epoch/")
 
         current = val_metrics.get(es_metric, float("inf"))
         # FIX E9 (save side): strip numpy scalars from val_metrics before
@@ -529,15 +455,8 @@ def train(config, run_name="default"):
         }
         if current < best_metric:
             best_metric, patience_counter = current, 0
-            save_checkpoint(
-                model,
-                optimizer,
-                epoch,
-                float(current),
-                os.path.join(ckpt_dir, "best.pt"),
-                scaler=scaler,
-                extra={"config": config, "val_metrics": val_metrics_clean},
-            )
+            save_checkpoint(model, optimizer, epoch, float(current), os.path.join(ckpt_dir, "best.pt"),
+                          scaler=scaler, extra={"config": config, "val_metrics": val_metrics_clean})
         else:
             patience_counter += 1
             if patience_counter >= patience:
@@ -554,24 +473,15 @@ def train(config, run_name="default"):
             patience,
         )
 
-        save_checkpoint(
-            model,
-            optimizer,
-            epoch,
-            float(current),
-            os.path.join(ckpt_dir, "last.pt"),
-            scaler=scaler,
-        )
+        save_checkpoint(model, optimizer, epoch, float(current), os.path.join(ckpt_dir, "last.pt"), scaler=scaler)
 
     if tracker == "wandb":
-        import wandb
-
-        wandb.finish()
+        import wandb; wandb.finish()
     elif hasattr(tracker, "close"):
         tracker.close()
 
     # Clear correlation edge caches so the next seed run starts fresh
-    if hasattr(train_loader.dataset, "graph_builder"):
+    if hasattr(train_loader.dataset, 'graph_builder'):
         train_loader.dataset.graph_builder.corr_builder.clear_cache()
 
     logger.info(f"Training complete. Best {es_metric}: {best_metric:.6f}")
@@ -587,9 +497,7 @@ def main():
     config = load_config(args.config)
     if args.seed is not None:
         config["seed"] = args.seed
-    log_path = setup_logging(
-        config, command_name="train", config_path=args.config, args=args
-    )
+    log_path = setup_logging(config, command_name="train", config_path=args.config, args=args)
     logger.info("Loaded config from %s", os.path.abspath(args.config))
     log_runtime_context("train", config, extra={"train_log_path": log_path})
 
@@ -598,9 +506,7 @@ def main():
     results = []
     for i in range(num_seeds):
         config["seed"] = base_seed + i
-        logger.info(
-            f"\n{'='*60}\nSeed run {i+1}/{num_seeds} (seed={config['seed']})\n{'='*60}"
-        )
+        logger.info(f"\n{'='*60}\nSeed run {i+1}/{num_seeds} (seed={config['seed']})\n{'='*60}")
         _, metric = train(config, run_name=f"seed_{config['seed']}")
         results.append(metric)
 

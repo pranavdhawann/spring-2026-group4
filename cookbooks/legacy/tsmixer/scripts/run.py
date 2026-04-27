@@ -1,6 +1,5 @@
 """End-to-end: load universe, build features, train ONE global TSMixer across all tickers."""
 from __future__ import annotations
-
 import argparse
 import json
 import random
@@ -74,9 +73,7 @@ def main():
         top_n=int(u.get("top_n", 500)),
         min_days=int(u.get("min_days", 252)),
     )
-    print(
-        f"Universe: {len(universe)} tickers by liquidity in [{u.get('start')}, {u.get('end')})"
-    )
+    print(f"Universe: {len(universe)} tickers by liquidity in [{u.get('start')}, {u.get('end')})")
     (ckpt_dir / "universe.txt").write_text("\n".join(universe))
 
     universe_set = set(universe)
@@ -89,13 +86,7 @@ def main():
         assets, y["data"]["train_frac"], y["data"]["val_frac"]
     )
     val_agg, test_agg, test_per_ticker = train_global(
-        train_a,
-        val_a,
-        test_a,
-        ticker_to_id,
-        target_scalers,
-        cfg,
-        ckpt_dir / "global.pt",
+        train_a, val_a, test_a, ticker_to_id, target_scalers, cfg, ckpt_dir / "global.pt"
     )
 
     print("\nAggregate VAL :", val_agg)

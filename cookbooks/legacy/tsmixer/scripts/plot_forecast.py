@@ -6,7 +6,6 @@ History / actual / predicted lines are all anchored at (end_date, last_close) so
 they are visually connected.
 """
 from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path
@@ -60,12 +59,8 @@ def main():
     ap.add_argument("--config", default=str(ROOT / "configs" / "default.yaml"))
     ap.add_argument("--ticker", required=True)
     ap.add_argument("--ckpt", default=None)
-    ap.add_argument(
-        "--end_index",
-        type=int,
-        default=-1,
-        help="Row index (full feature frame) of the last lookback day; default = last valid",
-    )
+    ap.add_argument("--end_index", type=int, default=-1,
+                    help="Row index (full feature frame) of the last lookback day; default = last valid")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -80,17 +75,13 @@ def main():
     raw_x = feats[FEATURE_COLS].values.astype(np.float32)
     dates = feats.index
 
-    ckpt = (
-        Path(args.ckpt) if args.ckpt else ROOT / y["output"]["ckpt_dir"] / "global.pt"
-    )
+    ckpt = Path(args.ckpt) if args.ckpt else ROOT / y["output"]["ckpt_dir"] / "global.pt"
     payload = torch.load(ckpt, map_location=device)
     if isinstance(payload, dict) and "model_state_dict" in payload:
         state_dict = payload["model_state_dict"]
         ticker_to_id = payload.get("ticker_to_id", {})
         target_scalers = payload.get("target_scalers", {})
-        ticker_embed_dim = int(
-            payload.get("ticker_embed_dim", y["model"].get("ticker_embed_dim", 8))
-        )
+        ticker_embed_dim = int(payload.get("ticker_embed_dim", y["model"].get("ticker_embed_dim", 8)))
     else:
         state_dict = payload
         ticker_to_id = {}
@@ -134,9 +125,7 @@ def main():
     model.eval()
     with torch.no_grad():
         xb = torch.from_numpy(window).unsqueeze(0).to(device)
-        tid = torch.tensor(
-            [int(ticker_to_id.get(args.ticker, 0))], device=device, dtype=torch.long
-        )
+        tid = torch.tensor([int(ticker_to_id.get(args.ticker, 0))], device=device, dtype=torch.long)
         pred_scaled = model(xb, ticker_id=tid).cpu().numpy()[0]
     pred_ret = pred_scaled * scale + center
 
@@ -153,56 +142,28 @@ def main():
     hist_close = close.reindex(pd.DatetimeIndex(hist_dates).normalize()).ffill().values
 
     # Anchor both forecast series at (end_date, last_close) so lines are continuous
-    actual_dates_full = np.concatenate(
-        [[end_date.to_datetime64()], future_dates.values]
-    )
+    actual_dates_full = np.concatenate([[end_date.to_datetime64()], future_dates.values])
     pred_dates_full = actual_dates_full
     actual_prices = _reconstruct_prices(last_close, future_ret)
     pred_prices = _reconstruct_prices(last_close, pred_ret)
 
     # --- plot ---
     fig, ax = plt.subplots(figsize=(10, 4.8))
-    ax.plot(
-        hist_dates,
-        hist_close,
-        color="#4b4b4b",
-        marker="o",
-        ms=3,
-        lw=1.4,
-        label=f"History close ({hist_n}d)",
-    )
-    ax.plot(
-        actual_dates_full,
-        actual_prices,
-        color="#1f77b4",
-        marker="o",
-        lw=2,
-        label="Actual (t+1..t+5)",
-    )
-    ax.plot(
-        pred_dates_full,
-        pred_prices,
-        color="#d62728",
-        marker="s",
-        lw=2,
-        ls="--",
-        label="Predicted (t+1..t+5)",
-    )
+    ax.plot(hist_dates, hist_close, color="#4b4b4b", marker="o", ms=3, lw=1.4,
+            label=f"History close ({hist_n}d)")
+    ax.plot(actual_dates_full, actual_prices, color="#1f77b4", marker="o", lw=2,
+            label="Actual (t+1..t+5)")
+    ax.plot(pred_dates_full, pred_prices, color="#d62728", marker="s", lw=2, ls="--",
+            label="Predicted (t+1..t+5)")
     ax.axvline(end_date, color="gray", ls=":", lw=1)
-    ax.set_title(
-        f"{args.ticker.upper()}  5-day price forecast @ {end_date.date()}  (last close = {last_close:.2f})"
-    )
+    ax.set_title(f"{args.ticker.upper()}  5-day price forecast @ {end_date.date()}  (last close = {last_close:.2f})")
     ax.set_ylabel("close price")
     ax.set_xlabel("date")
     ax.legend(loc="best")
     fig.autofmt_xdate()
     fig.tight_layout()
 
-    out = (
-        Path(args.out)
-        if args.out
-        else ROOT / y["output"]["ckpt_dir"] / f"forecast_{args.ticker}.png"
-    )
+    out = Path(args.out) if args.out else ROOT / y["output"]["ckpt_dir"] / f"forecast_{args.ticker}.png"
     fig.savefig(out, dpi=140)
     print(f"Saved plot -> {out}")
     print("Predicted log returns:", np.round(pred_ret, 5).tolist())

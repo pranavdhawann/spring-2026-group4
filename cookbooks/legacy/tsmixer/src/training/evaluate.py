@@ -1,6 +1,5 @@
 """Evaluation metrics for log-return forecasts."""
 from __future__ import annotations
-
 import numpy as np
 from scipy.stats import spearmanr
 
@@ -8,16 +7,14 @@ from scipy.stats import spearmanr
 def regression_metrics(pred: np.ndarray, target: np.ndarray) -> dict:
     err = pred - target
     mae = np.mean(np.abs(err))
-    mse = float(np.mean(err**2))
-    rmse = float(np.sqrt(np.mean(err**2)))
+    mse = float(np.mean(err ** 2))
+    rmse = float(np.sqrt(np.mean(err ** 2)))
     denom = np.where(np.abs(target) < 1e-6, 1e-6, np.abs(target))
     mape = float(np.mean(np.abs(err) / denom))
     return {"MAE": float(mae), "MSE": mse, "RMSE": rmse, "MAPE": mape}
 
 
-def price_path_from_log_returns(
-    anchor_close: np.ndarray, log_returns: np.ndarray
-) -> np.ndarray:
+def price_path_from_log_returns(anchor_close: np.ndarray, log_returns: np.ndarray) -> np.ndarray:
     anchor = np.asarray(anchor_close, dtype=np.float64).reshape(-1)
     returns = np.asarray(log_returns, dtype=np.float64)
     if np.any(anchor <= 0.0):
@@ -29,7 +26,7 @@ def price_path_from_log_returns(
 def price_metrics(pred_price: np.ndarray, target_price: np.ndarray) -> dict:
     err = pred_price - target_price
     mae = float(np.mean(np.abs(err)))
-    mse = float(np.mean(err**2))
+    mse = float(np.mean(err ** 2))
     rmse = float(np.sqrt(mse))
     return {"PriceMAE": mae, "PriceMSE": mse, "PriceRMSE": rmse}
 

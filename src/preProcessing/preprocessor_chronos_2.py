@@ -111,7 +111,9 @@ def handle_missing_values(
     # Impute remaining NaNs
     remaining_targets = [c for c in df.columns if c != timestamp_column]
     if method == "ffill_bfill":
-        df[remaining_targets] = df[remaining_targets].ffill().bfill()
+        df[remaining_targets] = (
+            df[remaining_targets].ffill().bfill()
+        )
     elif method == "interpolate":
         df[remaining_targets] = (
             df[remaining_targets].interpolate(method="linear").bfill().ffill()

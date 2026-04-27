@@ -59,7 +59,8 @@ def load_ticker(path: str, target_col: str = "Close") -> Tuple[np.ndarray, np.nd
 
     if target_col not in df.columns:
         raise KeyError(
-            f"Target column '{target_col}' not found. " f"Available: {list(df.columns)}"
+            f"Target column '{target_col}' not found. "
+            f"Available: {list(df.columns)}"
         )
 
     dates = df.index.values.astype("datetime64[D]")
@@ -133,9 +134,7 @@ if __name__ == "__main__":
 
     if args.manifest and Path(args.manifest).exists():
         print(f"Loading tickers from manifest: {args.manifest}")
-        all_data = load_all_tickers(
-            args.manifest, str(data_dir), target_col=args.target_col
-        )
+        all_data = load_all_tickers(args.manifest, str(data_dir), target_col=args.target_col)
         for item in all_data[: args.n]:
             _print_stats(item["ticker"], item["dates"], item["values"])
     else:

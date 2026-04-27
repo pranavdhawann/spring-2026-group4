@@ -154,22 +154,13 @@ def compute_adx(
     up_move = high - prev_high
     down_move = prev_low - low
 
-    plus_dm = pd.Series(
-        np.where((up_move > down_move) & (up_move > 0), up_move, 0), index=high.index
-    )
-    minus_dm = pd.Series(
-        np.where((down_move > up_move) & (down_move > 0), down_move, 0),
-        index=high.index,
-    )
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0), index=high.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0), index=high.index)
 
     # Smoothed averages
     atr = tr.ewm(alpha=1 / period, min_periods=period).mean()
-    plus_di = 100 * (
-        plus_dm.ewm(alpha=1 / period, min_periods=period).mean() / (atr + 1e-10)
-    )
-    minus_di = 100 * (
-        minus_dm.ewm(alpha=1 / period, min_periods=period).mean() / (atr + 1e-10)
-    )
+    plus_di = 100 * (plus_dm.ewm(alpha=1 / period, min_periods=period).mean() / (atr + 1e-10))
+    minus_di = 100 * (minus_dm.ewm(alpha=1 / period, min_periods=period).mean() / (atr + 1e-10))
 
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di + 1e-10)
     adx = dx.ewm(alpha=1 / period, min_periods=period).mean()
@@ -186,9 +177,7 @@ def compute_cci(
     """Commodity Channel Index (normalized by dividing by 200)."""
     typical_price = (high + low + close) / 3
     sma = typical_price.rolling(window=period).mean()
-    mad = typical_price.rolling(window=period).apply(
-        lambda x: np.abs(x - x.mean()).mean(), raw=True
-    )
+    mad = typical_price.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
     cci = (typical_price - sma) / (0.015 * mad + 1e-10)
     return cci / 200.0  # Rough normalization to ~[-1, 1]
 
@@ -223,8 +212,12 @@ def compute_mfi(
     money_flow = typical_price * volume
 
     tp_diff = typical_price.diff()
-    positive_flow = pd.Series(np.where(tp_diff > 0, money_flow, 0), index=close.index)
-    negative_flow = pd.Series(np.where(tp_diff < 0, money_flow, 0), index=close.index)
+    positive_flow = pd.Series(
+        np.where(tp_diff > 0, money_flow, 0), index=close.index
+    )
+    negative_flow = pd.Series(
+        np.where(tp_diff < 0, money_flow, 0), index=close.index
+    )
 
     positive_sum = positive_flow.rolling(window=period).sum()
     negative_sum = negative_flow.rolling(window=period).sum()

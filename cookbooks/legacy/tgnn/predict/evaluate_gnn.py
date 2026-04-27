@@ -21,8 +21,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.dataset_gnn import build_dataloaders
-from src.model_gnn import TemporalGNN
 from src.utils_gnn import (
     DEFAULT_BEST_CHECKPOINT,
     DEFAULT_CONFIG_PATH,
@@ -34,6 +32,8 @@ from src.utils_gnn import (
     set_seed,
     setup_logging,
 )
+from src.dataset_gnn import build_dataloaders
+from src.model_gnn import TemporalGNN
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 # ===========================================================================
 # Metric Computation
 # ===========================================================================
-
 
 def _mape(pred, actual):
     """Mean Absolute Percentage Error. Skips where actual ≈ 0."""
@@ -70,14 +69,14 @@ def compute_metrics(
     errors_close = pred_close - target_close
 
     # ── Log-Return metrics (aggregate) ──
-    m["mse_log_return"] = float(np.mean(errors_lr**2))
+    m["mse_log_return"] = float(np.mean(errors_lr ** 2))
     m["mae_log_return"] = float(np.mean(np.abs(errors_lr)))
     m["rmse_log_return"] = float(np.sqrt(m["mse_log_return"]))
     m["mape_log_return"] = float(_mape(pred_lr, target_lr))
     m["smape_log_return"] = float(_smape(pred_lr, target_lr))
 
     # ── Close-Price metrics (aggregate) ──
-    m["mse_close"] = float(np.mean(errors_close**2))
+    m["mse_close"] = float(np.mean(errors_close ** 2))
     m["mae_close"] = float(np.mean(np.abs(errors_close)))
     m["rmse_close"] = float(np.sqrt(m["mse_close"]))
     m["mape_close"] = float(_mape(pred_close, target_close))
@@ -91,12 +90,12 @@ def compute_metrics(
     for h in range(horizon):
         e = errors_lr[:, h]
         ec = errors_close[:, h]
-        m[f"mse_h{h+1}"] = float(np.mean(e**2))
+        m[f"mse_h{h+1}"] = float(np.mean(e ** 2))
         m[f"mae_h{h+1}"] = float(np.mean(np.abs(e)))
         m[f"rmse_h{h+1}"] = float(np.sqrt(m[f"mse_h{h+1}"]))
         m[f"mape_h{h+1}"] = float(_mape(pred_lr[:, h], target_lr[:, h]))
         m[f"smape_h{h+1}"] = float(_smape(pred_lr[:, h], target_lr[:, h]))
-        m[f"mse_close_h{h+1}"] = float(np.mean(ec**2))
+        m[f"mse_close_h{h+1}"] = float(np.mean(ec ** 2))
         m[f"mae_close_h{h+1}"] = float(np.mean(np.abs(ec)))
         m[f"rmse_close_h{h+1}"] = float(np.sqrt(m[f"mse_close_h{h+1}"]))
         m[f"mape_close_h{h+1}"] = float(_mape(pred_close[:, h], target_close[:, h]))
@@ -137,7 +136,6 @@ def compute_ic_ir(predictions_by_date, horizon_idx=0):
 # Long-Short Backtest
 # ===========================================================================
 
-
 def run_long_short_backtest(predictions_by_date, decile=0.1, **kwargs):
     daily_returns, prev_long, prev_short, turnover_list = [], set(), set(), []
     for date_str in sorted(predictions_by_date.keys()):
@@ -152,24 +150,13 @@ def run_long_short_backtest(predictions_by_date, decile=0.1, **kwargs):
         ls, ss = set(np.array(tickers)[long_i]), set(np.array(tickers)[short_i])
         if prev_long:
             turnover_list.append(
-                (
-                    len(ls.symmetric_difference(prev_long))
-                    + len(ss.symmetric_difference(prev_short))
-                )
-                / (4 * n)
+                (len(ls.symmetric_difference(prev_long)) + len(ss.symmetric_difference(prev_short))) / (4 * n)
             )
         prev_long, prev_short = ls, ss
 
     if not daily_returns:
-        return {
-            "sharpe_ratio": 0,
-            "max_drawdown": 0,
-            "avg_turnover": 0,
-            "total_return": 0,
-            "avg_daily_return": 0,
-            "return_std": 0,
-            "num_days": 0,
-        }
+        return {"sharpe_ratio": 0, "max_drawdown": 0, "avg_turnover": 0, "total_return": 0,
+                "avg_daily_return": 0, "return_std": 0, "num_days": 0}
     r = np.array(daily_returns)
     cum = np.cumsum(r)
     return {
@@ -187,43 +174,30 @@ def run_long_short_backtest(predictions_by_date, decile=0.1, **kwargs):
 # Print Helpers
 # ===========================================================================
 
-
 def _print_metrics_table(metrics, horizon=5):
     """Print a clean table of all core metrics."""
     logger.info("")
     logger.info("=" * 80)
     logger.info("  LOG-RETURN METRICS")
     logger.info("-" * 80)
-    logger.info(
-        f"  {'':12s} {'MSE':>12s} {'MAE':>12s} {'RMSE':>12s} {'MAPE(%)':>12s} {'sMAPE(%)':>12s}"
-    )
-    logger.info(
-        f"  {'Overall':12s} {metrics['mse_log_return']:12.6f} {metrics['mae_log_return']:12.6f} "
-        f"{metrics['rmse_log_return']:12.6f} {metrics['mape_log_return']:12.2f} {metrics['smape_log_return']:12.2f}"
-    )
+    logger.info(f"  {'':12s} {'MSE':>12s} {'MAE':>12s} {'RMSE':>12s} {'MAPE(%)':>12s} {'sMAPE(%)':>12s}")
+    logger.info(f"  {'Overall':12s} {metrics['mse_log_return']:12.6f} {metrics['mae_log_return']:12.6f} "
+                f"{metrics['rmse_log_return']:12.6f} {metrics['mape_log_return']:12.2f} {metrics['smape_log_return']:12.2f}")
     for h in range(horizon):
         tag = f"Day {h+1}"
-        logger.info(
-            f"  {tag:12s} {metrics[f'mse_h{h+1}']:12.6f} {metrics[f'mae_h{h+1}']:12.6f} "
-            f"{metrics[f'rmse_h{h+1}']:12.6f} {metrics[f'mape_h{h+1}']:12.2f} {metrics[f'smape_h{h+1}']:12.2f}"
-        )
+        logger.info(f"  {tag:12s} {metrics[f'mse_h{h+1}']:12.6f} {metrics[f'mae_h{h+1}']:12.6f} "
+                     f"{metrics[f'rmse_h{h+1}']:12.6f} {metrics[f'mape_h{h+1}']:12.2f} {metrics[f'smape_h{h+1}']:12.2f}")
 
     logger.info("")
     logger.info("  CLOSE-PRICE METRICS")
     logger.info("-" * 80)
-    logger.info(
-        f"  {'':12s} {'MSE':>12s} {'MAE':>12s} {'RMSE':>12s} {'MAPE(%)':>12s} {'sMAPE(%)':>12s}"
-    )
-    logger.info(
-        f"  {'Overall':12s} {metrics['mse_close']:12.4f} {metrics['mae_close']:12.4f} "
-        f"{metrics['rmse_close']:12.4f} {metrics['mape_close']:12.2f} {metrics['smape_close']:12.2f}"
-    )
+    logger.info(f"  {'':12s} {'MSE':>12s} {'MAE':>12s} {'RMSE':>12s} {'MAPE(%)':>12s} {'sMAPE(%)':>12s}")
+    logger.info(f"  {'Overall':12s} {metrics['mse_close']:12.4f} {metrics['mae_close']:12.4f} "
+                f"{metrics['rmse_close']:12.4f} {metrics['mape_close']:12.2f} {metrics['smape_close']:12.2f}")
     for h in range(horizon):
         tag = f"Day {h+1}"
-        logger.info(
-            f"  {tag:12s} {metrics[f'mse_close_h{h+1}']:12.4f} {metrics[f'mae_close_h{h+1}']:12.4f} "
-            f"{metrics[f'rmse_close_h{h+1}']:12.4f} {metrics[f'mape_close_h{h+1}']:12.2f} {metrics[f'smape_close_h{h+1}']:12.2f}"
-        )
+        logger.info(f"  {tag:12s} {metrics[f'mse_close_h{h+1}']:12.4f} {metrics[f'mae_close_h{h+1}']:12.4f} "
+                     f"{metrics[f'rmse_close_h{h+1}']:12.4f} {metrics[f'mape_close_h{h+1}']:12.2f} {metrics[f'smape_close_h{h+1}']:12.2f}")
 
     logger.info("")
     logger.info(f"  Relative MAE (close): {metrics['relative_mae_close_pct']:.2f}%")
@@ -273,12 +247,8 @@ def assess_tiers(metrics):
     rmse = metrics.get("rmse_log_return", float("inf"))
 
     def _fmt(t):
-        return {
-            3: "Tier 3 (Excellent)",
-            2: "Tier 2 (Good)",
-            1: "Tier 1 (Minimum Viable)",
-            0: "Below Tier 1",
-        }[t]
+        return {3: "Tier 3 (Excellent)", 2: "Tier 2 (Good)",
+                1: "Tier 1 (Minimum Viable)", 0: "Below Tier 1"}[t]
 
     tiers["Directional Acc"] = f"{_fmt(da_t)} ({da:.2%})"
     tiers["IC (mean)"] = f"{_fmt(ic_t)} ({ic:.4f})"
@@ -298,9 +268,7 @@ def assess_tiers(metrics):
 # If our model cannot beat ``pred = 0`` on IC/directional accuracy/Sharpe,
 # we have not learned anything useful regardless of how small the MAE is.
 # ===========================================================================
-def compute_zero_baseline(
-    target_lr, target_close, last_close, predictions_by_date, horizon=5, eval_cfg=None
-):
+def compute_zero_baseline(target_lr, target_close, last_close, predictions_by_date, horizon=5, eval_cfg=None):
     """Metrics for the constant-zero predictor (pred_lr = 0 everywhere)."""
     pred_lr_zero = np.zeros_like(target_lr)
 
@@ -313,9 +281,7 @@ def compute_zero_baseline(
         inferred_last = target_close / np.exp(np.cumsum(target_lr, axis=1))
     pred_close_zero = np.repeat(inferred_last[:, :1], horizon, axis=1)
 
-    m = compute_metrics(
-        pred_lr_zero, target_lr, pred_close_zero, target_close, horizon=horizon
-    )
+    m = compute_metrics(pred_lr_zero, target_lr, pred_close_zero, target_close, horizon=horizon)
 
     # Zero predictor has zero IC (no variance) and ~50% directional accuracy.
     # But we also need to compute the long-short backtest as if we had made
@@ -341,16 +307,11 @@ def compute_zero_baseline(
 # Full Evaluation Pipeline
 # ===========================================================================
 
-
 @torch.no_grad()
 def evaluate(config, checkpoint_path, split="test"):
     set_seed(config.get("seed", 42))
     device = get_device()
-    logger.info(
-        "Evaluation request | split=%s | checkpoint=%s",
-        split,
-        os.path.abspath(checkpoint_path),
-    )
+    logger.info("Evaluation request | split=%s | checkpoint=%s", split, os.path.abspath(checkpoint_path))
 
     train_loader, val_loader, test_loader, metadata = build_dataloaders(config)
     loader = test_loader if split == "test" else val_loader
@@ -397,15 +358,10 @@ def evaluate(config, checkpoint_path, split="test"):
         if date_str:
             predictions_by_date[date_str] = {
                 "tickers": tickers,
-                "pred_lr": pred_lr,
-                "actual_lr": targets,
-                "pred_lr_h1": pred_lr[:, 0],
-                "actual_lr_h1": targets[:, 0],
+                "pred_lr": pred_lr, "actual_lr": targets,
+                "pred_lr_h1": pred_lr[:, 0], "actual_lr_h1": targets[:, 0],
             }
-        if (
-            batch_idx % max(1, config.get("logging", {}).get("log_every_n_steps", 10))
-            == 0
-        ):
+        if batch_idx % max(1, config.get("logging", {}).get("log_every_n_steps", 10)) == 0:
             logger.debug(
                 "Processed eval batch %d | pred_date=%s | active=%d | targets=%d",
                 batch_idx,
@@ -425,13 +381,10 @@ def evaluate(config, checkpoint_path, split="test"):
 
     metrics = compute_metrics(pred_lr, target_lr, pred_close, target_close)
     metrics["icir_h1"] = compute_ic_ir(
-        {d: (v["pred_lr"], v["actual_lr"]) for d, v in predictions_by_date.items()}
-    )
+        {d: (v["pred_lr"], v["actual_lr"]) for d, v in predictions_by_date.items()})
 
     eval_cfg = config.get("evaluation", {})
-    ls = run_long_short_backtest(
-        predictions_by_date, decile=eval_cfg.get("long_short_decile", 0.1)
-    )
+    ls = run_long_short_backtest(predictions_by_date, decile=eval_cfg.get("long_short_decile", 0.1))
     for k, v in ls.items():
         metrics[f"ls_{k}"] = v
 
@@ -452,10 +405,8 @@ def evaluate(config, checkpoint_path, split="test"):
 
     logger.info("\n  LONG-SHORT PORTFOLIO")
     logger.info("-" * 80)
-    logger.info(
-        f"  Sharpe: {ls['sharpe_ratio']:.4f} | MaxDD: {ls['max_drawdown']:.4f} | "
-        f"Turnover: {ls['avg_turnover']:.2%} | Return: {ls['total_return']:.4f}"
-    )
+    logger.info(f"  Sharpe: {ls['sharpe_ratio']:.4f} | MaxDD: {ls['max_drawdown']:.4f} | "
+                f"Turnover: {ls['avg_turnover']:.2%} | Return: {ls['total_return']:.4f}")
 
     logger.info("\n  ZERO-PREDICTOR BASELINE (FIX E11)")
     logger.info("-" * 80)
@@ -470,9 +421,7 @@ def evaluate(config, checkpoint_path, split="test"):
     # Verdict line: highlights whether the model beats the zero baseline.
     beats_dir = metrics["directional_accuracy"] > zero_metrics["directional_accuracy"]
     beats_ic = metrics["ic_mean"] > zero_metrics["ic_mean"]
-    beats_sharpe = metrics.get("ls_sharpe_ratio", 0.0) > zero_metrics.get(
-        "ls_sharpe_ratio", 0.0
-    )
+    beats_sharpe = metrics.get("ls_sharpe_ratio", 0.0) > zero_metrics.get("ls_sharpe_ratio", 0.0)
     logger.info(
         "  Beats zero? dir=%s | ic=%s | sharpe=%s",
         "YES" if beats_dir else "NO",
@@ -489,9 +438,7 @@ def evaluate(config, checkpoint_path, split="test"):
     os.makedirs(DEFAULT_RESULTS_DIR, exist_ok=True)
     output_path = os.path.join(DEFAULT_RESULTS_DIR, f"metrics_{split}.json")
     with open(output_path, "w") as f:
-        json.dump(
-            {"model": metrics, "zero_baseline": zero_metrics}, f, indent=2, default=str
-        )
+        json.dump({"model": metrics, "zero_baseline": zero_metrics}, f, indent=2, default=str)
     logger.info("\nSaved to %s", output_path)
 
     return metrics
@@ -504,9 +451,7 @@ def main():
     parser.add_argument("--split", default="test", choices=["val", "test"])
     args = parser.parse_args()
     config = load_config(args.config)
-    log_path = setup_logging(
-        config, command_name="evaluate", config_path=args.config, args=args
-    )
+    log_path = setup_logging(config, command_name="evaluate", config_path=args.config, args=args)
     logger.info("Loaded config from %s", os.path.abspath(args.config))
     log_runtime_context("evaluate", config, extra={"evaluation_log_path": log_path})
     evaluate(config, args.checkpoint, args.split)

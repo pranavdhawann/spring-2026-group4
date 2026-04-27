@@ -1,4 +1,6 @@
+# ===============================
 # Python
+# ===============================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -9,30 +11,40 @@ venv/
 .venv/
 pip-wheel-metadata/
 
+# ===============================
 # Jupyter Notebooks
+# ===============================
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
 
+# ===============================
 # Virtual Environments
+# ===============================
 ENV/
 env.bak/
 venv.bak/
 
+# ===============================
 # IDE / Editors
+# ===============================
 .vscode/
 .idea/
 *.swp
 *.swo
 .DS_Store
 
+# ===============================
 # Logs & Debug
+# ===============================
 *.log
 logs/
 debug/
 wandb/
 mlruns/
 
+# ===============================
 # Data (RAW & INTERMEDIATE)
+# ===============================
 data/
 raw_data/
 processed_data/
@@ -46,7 +58,9 @@ interim_data/
 *.npy
 *.npz
 
+# ===============================
 # Model Artifacts
+# ===============================
 checkpoints/
 *.pt
 *.pth
@@ -56,13 +70,17 @@ checkpoints/
 *.pkl
 *.onnx
 
+# ===============================
 # Experiment Tracking
+# ===============================
 wandb/
 mlruns/
 tensorboard/
 runs/
 
+# ===============================
 # Configs with Secrets
+# ===============================
 .env
 .env.*
 *.key
@@ -70,32 +88,44 @@ runs/
 secrets.yaml
 secrets.json
 
+# ===============================
 # Cache / Temporary Files
+# ===============================
 .cache/
 tmp/
 temp/
 *.tmp
 
+# ===============================
 # Datasets / Large Files
+# ===============================
 *.zip
 *.tar
 *.tar.gz
 *.7z
 
+# ===============================
 # OS / System
+# ===============================
 Thumbs.db
 ehthumbs.db
 Icon?
 
+# ===============================
 # Testing
+# ===============================
 .coverage
 htmlcov/
 .pytest_cache/
 
+# ===============================
 # Documentation Builds
+# ===============================
 docs/_build/
 
+# ===============================
 # Misc
+# ===============================
 *.bak
 *.old
 /.claude

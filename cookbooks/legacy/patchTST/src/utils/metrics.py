@@ -4,21 +4,17 @@ from __future__ import annotations
 import numpy as np
 
 
-def _summarize_errors(
-    preds: np.ndarray, targets: np.ndarray, mape_floor: float = 1e-3
-) -> dict:
+def _summarize_errors(preds: np.ndarray, targets: np.ndarray, mape_floor: float = 1e-3) -> dict:
     errs = preds - targets
     mae_h = np.mean(np.abs(errs), axis=0)
-    mse_h = np.mean(errs**2, axis=0)
+    mse_h = np.mean(errs ** 2, axis=0)
     rmse_h = np.sqrt(mse_h)
 
     mape_h = []
     for h in range(targets.shape[1]):
         mask = np.abs(targets[:, h]) > mape_floor
         if mask.any():
-            mape_h.append(
-                float(np.mean(np.abs(errs[mask, h] / targets[mask, h])) * 100)
-            )
+            mape_h.append(float(np.mean(np.abs(errs[mask, h] / targets[mask, h])) * 100))
         else:
             mape_h.append(float("nan"))
     mape_h = np.array(mape_h)
@@ -39,9 +35,7 @@ def _summarize_errors(
     }
 
 
-def log_returns_to_prices(
-    base_prices: np.ndarray, log_returns: np.ndarray
-) -> np.ndarray:
+def log_returns_to_prices(base_prices: np.ndarray, log_returns: np.ndarray) -> np.ndarray:
     """Convert log-return forecasts into close-price paths.
 
     base_prices: (N,) or scalar-like base close before each forecast window.

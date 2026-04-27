@@ -6,15 +6,8 @@ from tqdm import tqdm
 
 from src.dataLoader import getTrainTestDataLoader
 from src.utils import read_json_file, read_yaml, set_seed
-
 DEFAULT_TS_COLS = [
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "dividends",
-    "stock splits",
+    "open", "high", "low", "close", "volume", "dividends", "stock splits"
 ]
 DEFAULT_TABLE_COLS = [
     "us-gaap_Assets",
@@ -104,7 +97,9 @@ def _sample_to_vector(
         texts = _flatten_articles(sample)
         text_feats = text_encoder(texts)
     else:
-        text_feats = _text_encoder_placeholder(_flatten_articles(sample), dim=text_dim)
+        text_feats = _text_encoder_placeholder(
+            _flatten_articles(sample), dim=text_dim
+        )
 
     ts_feats = _time_series_features(sample.get("time_series") or [], ts_cols)
     table_feats = _table_features(sample.get("table_data") or [], table_cols)
@@ -121,9 +116,7 @@ def _sample_to_vector(
         last_day = ts_list[-1]
         if isinstance(last_day, dict):
             input_price = last_day.get("close")
-    if input_price is None or (
-        isinstance(input_price, float) and np.isnan(input_price)
-    ):
+    if input_price is None or (isinstance(input_price, float) and np.isnan(input_price)):
         input_price = np.nan
 
     meta = {
@@ -134,7 +127,6 @@ def _sample_to_vector(
         "ticker_id": sample.get("ticker_id", -1),
     }
     return X, y, meta
-
 
 def build_tabnet_features(
     config: Dict,
@@ -151,9 +143,7 @@ def build_tabnet_features(
     data_config = {
         "data_path": config["data_path"],
         "ticker2idx": config["ticker2idx"],
-        "test_train_split": pre.get(
-            "test_train_split", config.get("test_train_split", 0.2)
-        ),
+        "test_train_split": pre.get("test_train_split", config.get("test_train_split", 0.2)),
         "random_seed": pre.get("random_seed", config.get("random_seed", 42)),
     }
     train_dl, test_dl = getTrainTestDataLoader(data_config)
@@ -199,10 +189,8 @@ def build_tabnet_features(
 
     return X_train, y_train, X_test, y_test, meta_train, meta_test
 
-
 if __name__ == "__main__":
     from pathlib import Path
-
     project_root = Path(__file__).resolve().parents[2]
     config = read_yaml(str(project_root / "config" / "config.yaml"))
     tabnet_config = read_yaml(str(project_root / "config" / "tabnet_config.yaml"))

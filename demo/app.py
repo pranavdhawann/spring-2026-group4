@@ -9,14 +9,13 @@ import sys
 import warnings
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
-import torch
-import yaml
 import yfinance as yf
+import torch
+import plotly.graph_objects as go
+import yaml
 from sklearn.exceptions import InconsistentVersionWarning
 
 try:
@@ -34,9 +33,7 @@ SRC_MODELS_DIR = os.path.join(PROJECT_ROOT, "src", "models")
 SRC_PREPROCESSING_DIR = os.path.join(PROJECT_ROOT, "src", "preProcessing")
 LSTM_LEGACY_DIR = os.path.join(PROJECT_ROOT, "cookbooks", "legacy", "lstm")
 TSMIXER_LEGACY_DIR = os.path.join(PROJECT_ROOT, "cookbooks", "legacy", "tsmixer")
-EXPERIMENT_TFT_MODEL_PATH = os.path.join(
-    PROJECT_ROOT, "experiments", "tft", "tft_model.py"
-)
+EXPERIMENT_TFT_MODEL_PATH = os.path.join(PROJECT_ROOT, "experiments", "tft", "tft_model.py")
 EXPERIMENT_TFT_MULTIMODAL_PATH = os.path.join(
     PROJECT_ROOT, "experiments", "tft_finbert", "TftMultiModalBaseline.py"
 )
@@ -46,9 +43,8 @@ sys.modules.setdefault("torchvision", None)
 sys.modules.setdefault("torchvision.transforms", None)
 
 try:
-    import transformers.utils.import_utils as transformers_import_utils
     from transformers import AutoTokenizer
-
+    import transformers.utils.import_utils as transformers_import_utils
     transformers_import_utils.is_torchvision_available = lambda: False
     transformers_import_utils.is_torchvision_v2_available = lambda: False
     TRANSFORMERS_AVAILABLE = True
@@ -64,7 +60,6 @@ warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 TFT_IMPORT_ERROR = None
 MULTIMODAL_IMPORT_ERROR = None
 LEGACY_IMPORT_ERROR = None
-
 
 def import_from_path(module_name, path):
     spec = importlib.util.spec_from_file_location(module_name, path)
@@ -156,18 +151,14 @@ calculate_bollinger_bands = tcn_preprocessing_module.calculate_bollinger_bands
 calculate_rsi = tcn_preprocessing_module.calculate_rsi
 calculate_macd = tcn_preprocessing_module.calculate_macd
 
-CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "config.yaml")
-TFT_CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "tft_config.yaml")
+CONFIG_PATH = os.path.join(PROJECT_ROOT, 'config', 'config.yaml')
+TFT_CONFIG_PATH = os.path.join(PROJECT_ROOT, 'config', 'tft_config.yaml')
 DEMO_MODEL_PATHS = {
     "TFT": os.path.join(PROJECT_ROOT, "experiments", "tft"),
     "TFT-FinBERT": os.path.join(PROJECT_ROOT, "experiments", "tft_finbert"),
 }
-LSTM_CHECKPOINT_PATH = os.path.join(
-    PROJECT_ROOT, "experiments", "lstm_results", "model.pt"
-)
-TSMIXER_CHECKPOINT_PATH = os.path.join(
-    PROJECT_ROOT, "experiments", "tsmixer_results", "global.pt"
-)
+LSTM_CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "experiments", "lstm_results", "model.pt")
+TSMIXER_CHECKPOINT_PATH = os.path.join(PROJECT_ROOT, "experiments", "tsmixer_results", "global.pt")
 MODEL_CHOICES = [
     "TFT",
     "TFT-FinBERT",
@@ -194,11 +185,10 @@ st.set_page_config(
     page_title="Stock Backtesting Terminal",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
-st.markdown(
-    f"""
+st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Inter:wght@400;600&display=swap');
 
@@ -380,9 +370,7 @@ st.markdown(
         border-top-color: {ACCENT_ORANGE} !important;
     }}
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 
 def apply_terminal_layout(fig, height=380, show_legend=True):
@@ -397,10 +385,8 @@ def apply_terminal_layout(fig, height=380, show_legend=True):
         showlegend=show_legend,
         legend=dict(
             orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="left",
-            x=0,
+            yanchor="bottom", y=1.02,
+            xanchor="left", x=0,
             bgcolor=BG_PANEL,
             bordercolor=GRID,
             borderwidth=1,
@@ -413,16 +399,12 @@ def apply_terminal_layout(fig, height=380, show_legend=True):
         ),
     )
     fig.update_xaxes(
-        gridcolor=GRID,
-        zerolinecolor=ZERO,
-        linecolor=GRID,
+        gridcolor=GRID, zerolinecolor=ZERO, linecolor=GRID,
         tickfont=dict(color=TEXT_MUTED, size=10, family=MONO_FONT),
         title=dict(font=dict(color=TEXT_MUTED, size=10, family=MONO_FONT)),
     )
     fig.update_yaxes(
-        gridcolor=GRID,
-        zerolinecolor=ZERO,
-        linecolor=GRID,
+        gridcolor=GRID, zerolinecolor=ZERO, linecolor=GRID,
         tickfont=dict(color=TEXT_MUTED, size=10, family=MONO_FONT),
         title=dict(font=dict(color=TEXT_MUTED, size=10, family=MONO_FONT)),
     )
@@ -497,27 +479,19 @@ def normalize_stock_frame(df):
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.tz_localize(None)
     for col in ["open", "high", "low", "close", "volume"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df.dropna(subset=["date", "open", "high", "low", "close"]).sort_values(
-        "date"
-    )
+    return df.dropna(subset=["date", "open", "high", "low", "close"]).sort_values("date")
 
 
 def fetch_stock_data_from_yahoo_chart(ticker, days=150):
     end_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-    start_ts = int(
-        (
-            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
-        ).timestamp()
-    )
-    query = urlencode(
-        {
-            "period1": start_ts,
-            "period2": end_ts,
-            "interval": "1d",
-            "includePrePost": "false",
-            "events": "history",
-        }
-    )
+    start_ts = int((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)).timestamp())
+    query = urlencode({
+        "period1": start_ts,
+        "period2": end_ts,
+        "interval": "1d",
+        "includePrePost": "false",
+        "events": "history",
+    })
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?{query}"
     request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
@@ -537,16 +511,14 @@ def fetch_stock_data_from_yahoo_chart(ticker, days=150):
     if not timestamps or not quote:
         return pd.DataFrame()
 
-    df = pd.DataFrame(
-        {
-            "date": pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None),
-            "open": quote.get("open"),
-            "high": quote.get("high"),
-            "low": quote.get("low"),
-            "close": quote.get("close"),
-            "volume": quote.get("volume"),
-        }
-    )
+    df = pd.DataFrame({
+        "date": pd.to_datetime(timestamps, unit="s", utc=True).tz_convert(None),
+        "open": quote.get("open"),
+        "high": quote.get("high"),
+        "low": quote.get("low"),
+        "close": quote.get("close"),
+        "volume": quote.get("volume"),
+    })
     return normalize_stock_frame(df)
 
 
@@ -560,7 +532,7 @@ def fetch_news_data(ticker, max_articles=4):
     articles = []
 
     for item in news_items:
-        title = item.get("title", "")
+        title = item.get('title', '')
         if title:
             articles.append(title)
         if len(articles) >= max_articles:
@@ -573,17 +545,17 @@ def fetch_news_data(ticker, max_articles=4):
 
 
 def preprocess_data(df):
-    close_prices = df["close"]
+    close_prices = df['close']
 
     bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(close_prices)
-    df["bb_upper"] = bb_upper
-    df["bb_middle"] = bb_middle
-    df["bb_lower"] = bb_lower
-    df["rsi"] = calculate_rsi(close_prices)
+    df['bb_upper'] = bb_upper
+    df['bb_middle'] = bb_middle
+    df['bb_lower'] = bb_lower
+    df['rsi'] = calculate_rsi(close_prices)
     macd_line, signal_line, histogram = calculate_macd(close_prices)
-    df["macd"] = macd_line
-    df["macd_signal"] = signal_line
-    df["macd_histogram"] = histogram
+    df['macd'] = macd_line
+    df['macd_signal'] = signal_line
+    df['macd_histogram'] = histogram
 
     df = df.ffill().bfill().fillna(0)
     return df
@@ -605,19 +577,15 @@ def get_missing_dependency_messages():
 
 
 def to_legacy_ohlcv(df):
-    legacy = df.rename(
-        columns={
-            "date": "Date",
-            "open": "Open",
-            "high": "High",
-            "low": "Low",
-            "close": "Close",
-            "volume": "Volume",
-        }
-    ).copy()
-    legacy["Date"] = pd.to_datetime(
-        legacy["Date"], utc=True, errors="coerce"
-    ).dt.tz_convert(None)
+    legacy = df.rename(columns={
+        "date": "Date",
+        "open": "Open",
+        "high": "High",
+        "low": "Low",
+        "close": "Close",
+        "volume": "Volume",
+    }).copy()
+    legacy["Date"] = pd.to_datetime(legacy["Date"], utc=True, errors="coerce").dt.tz_convert(None)
     legacy = legacy.dropna(subset=["Date"]).sort_values("Date")
     return legacy[["Date", "Open", "High", "Low", "Close", "Volume"]]
 
@@ -640,7 +608,7 @@ def get_valid_backtest_start_dates(df, seq_len, horizon):
     if len(df) < seq_len + horizon:
         return []
     dates = pd.to_datetime(df["date"]).reset_index(drop=True)
-    return list(dates.iloc[seq_len : len(df) - horizon + 1])
+    return list(dates.iloc[seq_len:len(df) - horizon + 1])
 
 
 def get_latest_backtest_start_date(valid_backtest_dates):
@@ -664,11 +632,7 @@ def get_model_backtest_start_dates(model_type, df, processed_df, seq_len, horizo
         features_df = build_lstm_features(legacy_df.set_index("Date"))
         lookback = seq_len
         if os.path.exists(LSTM_CHECKPOINT_PATH):
-            lookback = int(
-                torch.load(
-                    LSTM_CHECKPOINT_PATH, map_location="cpu", weights_only=False
-                ).get("lookback", seq_len)
-            )
+            lookback = int(torch.load(LSTM_CHECKPOINT_PATH, map_location="cpu", weights_only=False).get("lookback", seq_len))
         return get_valid_backtest_start_dates(
             pd.DataFrame({"date": pd.to_datetime(features_df.index)}),
             lookback,
@@ -691,21 +655,14 @@ def prepare_backtest_window(df, seq_len, horizon, backtest_start_date):
     start_date = pd.Timestamp(backtest_start_date).normalize()
     matches = np.flatnonzero(dates.eq(start_date).to_numpy())
     if len(matches) == 0:
-        raise ValueError(
-            f"Backtest start date {start_date:%Y-%m-%d} is not available in the data."
-        )
+        raise ValueError(f"Backtest start date {start_date:%Y-%m-%d} is not available in the data.")
 
     start_idx = int(matches[0])
     context_start = start_idx - seq_len
     actual_end = start_idx + horizon
     if context_start < 0 or actual_end > len(frame):
-        raise ValueError(
-            "Selected backtest window does not have enough context or ground truth."
-        )
-    return (
-        frame.iloc[context_start:start_idx].copy(),
-        frame.iloc[start_idx:actual_end].copy(),
-    )
+        raise ValueError("Selected backtest window does not have enough context or ground truth.")
+    return frame.iloc[context_start:start_idx].copy(), frame.iloc[start_idx:actual_end].copy()
 
 
 def compute_backtest_metrics(context_last_price, actual_prices, predicted_prices):
@@ -722,58 +679,45 @@ def compute_backtest_metrics(context_last_price, actual_prices, predicted_prices
     return {
         "mae": float(np.mean(np.abs(errors))),
         "rmse": float(np.sqrt(np.mean(np.square(errors)))),
-        "directional_accuracy": float(
-            np.mean(actual_direction == predicted_direction) * 100
-        ),
+        "directional_accuracy": float(np.mean(actual_direction == predicted_direction) * 100),
     }
 
 
-def build_backtest_figure(
-    history_dates, history_prices, backtest_dates, actual_prices, pred_prices
-):
+def build_backtest_figure(history_dates, history_prices, backtest_dates, actual_prices, pred_prices):
     pivot_date = history_dates[-1]
     pivot_price = history_prices[-1]
     fig = go.Figure()
 
-    fig.add_trace(
-        go.Scatter(
-            x=history_dates,
-            y=history_prices,
-            mode="lines+markers",
-            name="Historical Context",
-            line=dict(color=ACCENT_BLUE, width=1.5),
-            marker=dict(size=3, color=ACCENT_BLUE),
-            hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>",
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=history_dates, y=history_prices,
+        mode="lines+markers",
+        name="Historical Context",
+        line=dict(color=ACCENT_BLUE, width=1.5),
+        marker=dict(size=3, color=ACCENT_BLUE),
+        hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>",
+    ))
 
     actual_x = [pivot_date] + list(backtest_dates)
     actual_y = [pivot_price] + list(actual_prices)
-    fig.add_trace(
-        go.Scatter(
-            x=actual_x,
-            y=actual_y,
-            mode="lines+markers",
-            name="Actual",
-            line=dict(color=ACCENT_GREEN, width=1.7),
-            marker=dict(size=4, color=ACCENT_GREEN),
-            hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>",
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=actual_x, y=actual_y,
+        mode="lines+markers",
+        name="Actual",
+        line=dict(color=ACCENT_GREEN, width=1.7),
+        marker=dict(size=4, color=ACCENT_GREEN),
+        hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>",
+    ))
 
     pred_x = [pivot_date] + list(backtest_dates)
     pred_y = [pivot_price] + list(pred_prices)
-    fig.add_trace(
-        go.Scatter(
-            x=pred_x,
-            y=pred_y,
-            mode="lines+markers",
-            name="Predicted",
-            line=dict(color=ACCENT_ORANGE, width=1.5, dash="dot"),
-            marker=dict(size=4, color=ACCENT_ORANGE),
-            hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>",
-        )
-    )
+    fig.add_trace(go.Scatter(
+        x=pred_x, y=pred_y,
+        mode="lines+markers",
+        name="Predicted",
+        line=dict(color=ACCENT_ORANGE, width=1.5, dash="dot"),
+        marker=dict(size=4, color=ACCENT_ORANGE),
+        hovertemplate="%{x|%Y-%m-%d}<br>%{y:.2f}<extra></extra>",
+    ))
 
     fig.update_yaxes(title="PRICE (USD)")
     fig.update_xaxes(title="DATE")
@@ -801,15 +745,7 @@ def build_backtest_figure(
     return apply_terminal_layout(fig)
 
 
-def show_backtest_result(
-    ticker,
-    model_type,
-    history_dates,
-    history_prices,
-    backtest_dates,
-    actual_prices,
-    pred_prices,
-):
+def show_backtest_result(ticker, model_type, history_dates, history_prices, backtest_dates, actual_prices, pred_prices):
     start_price = float(history_prices[-1])
     actual_close = float(actual_prices[-1])
     forecast_close = float(pred_prices[-1])
@@ -823,62 +759,42 @@ def show_backtest_result(
     with k1:
         st.metric(f"Price {start_label}", f"${start_price:,.2f}")
     with k2:
-        st.metric(
-            "Actual Close", f"${actual_close:,.2f}", delta=f"{actual_return:+.2f}%"
-        )
+        st.metric("Actual Close", f"${actual_close:,.2f}", delta=f"{actual_return:+.2f}%")
     with k3:
-        st.metric(
-            "Forecast Close",
-            f"${forecast_close:,.2f}",
-            delta=f"{predicted_return:+.2f}%",
-        )
+        st.metric("Forecast Close", f"${forecast_close:,.2f}", delta=f"{predicted_return:+.2f}%")
 
     chart_tab, data_tab = st.tabs(["Backtest", "Data"])
 
     with chart_tab:
-        fig = build_backtest_figure(
-            history_dates, history_prices, backtest_dates, actual_prices, pred_prices
-        )
+        fig = build_backtest_figure(history_dates, history_prices, backtest_dates, actual_prices, pred_prices)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     with data_tab:
-        backtest_df = pd.DataFrame(
-            {
-                "Date": [d.strftime("%Y-%m-%d") for d in backtest_dates],
-                "Actual": [f"${p:,.2f}" for p in actual_prices],
-                "Predicted": [f"${p:,.2f}" for p in pred_prices],
-                "Abs Error": [
-                    f"${abs(a - p):,.2f}" for a, p in zip(actual_prices, pred_prices)
-                ],
-            }
-        )
+        backtest_df = pd.DataFrame({
+            "Date": [d.strftime('%Y-%m-%d') for d in backtest_dates],
+            "Actual": [f"${p:,.2f}" for p in actual_prices],
+            "Predicted": [f"${p:,.2f}" for p in pred_prices],
+            "Abs Error": [f"${abs(a - p):,.2f}" for a, p in zip(actual_prices, pred_prices)],
+        })
         st.dataframe(backtest_df, use_container_width=True, hide_index=True, height=240)
 
 
 @st.cache_resource
 def load_model(config, model_type="TFT"):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     experiment_path = None
 
     if model_type in ("TFT", "Standalone TFT (Numerical)"):
         if TFTModel is None:
-            raise RuntimeError(
-                f"TFT model definition is unavailable: {TFT_IMPORT_ERROR}"
-            )
-        model_config = config.get("model", {})
+            raise RuntimeError(f"TFT model definition is unavailable: {TFT_IMPORT_ERROR}")
+        model_config = config.get('model', {})
         model = TFTModel(model_config).to(device)
-        experiment_path = config.get("experiment_path", DEMO_MODEL_PATHS["TFT"])
+        experiment_path = config.get('experiment_path', DEMO_MODEL_PATHS["TFT"])
     elif model_type in ("TFT-FinBERT", "TFT-FinBERT (Multimodal)"):
         if TftMultiModalStockPredictor is None:
-            raise RuntimeError(
-                f"Multimodal TFT definition is unavailable: {MULTIMODAL_IMPORT_ERROR}"
-            )
-        model = TftMultiModalStockPredictor(config, num_tickers=234, num_sectors=13).to(
-            device
-        )
-        experiment_path = config.get(
-            "experiment_path_tft_multimodal", DEMO_MODEL_PATHS["TFT-FinBERT"]
-        )
+            raise RuntimeError(f"Multimodal TFT definition is unavailable: {MULTIMODAL_IMPORT_ERROR}")
+        model = TftMultiModalStockPredictor(config, num_tickers=234, num_sectors=13).to(device)
+        experiment_path = config.get('experiment_path_tft_multimodal', DEMO_MODEL_PATHS["TFT-FinBERT"])
     elif "LSTM" in model_type:
         if LSTMForecaster is None:
             raise RuntimeError(f"LSTM runtime is unavailable: {LEGACY_IMPORT_ERROR}")
@@ -894,21 +810,14 @@ def load_model(config, model_type="TFT"):
         ).to(device)
         model.load_state_dict(ckpt["model_state"])
         model.eval()
-        return (
-            model,
-            True,
-            device,
-            {
-                "checkpoint": ckpt,
-                "experiment_path": os.path.dirname(LSTM_CHECKPOINT_PATH),
-            },
-        )
+        return model, True, device, {
+            "checkpoint": ckpt,
+            "experiment_path": os.path.dirname(LSTM_CHECKPOINT_PATH),
+        }
     elif "TSMixer" in model_type:
         if TSMixer is None:
             raise RuntimeError(f"TSMixer runtime is unavailable: {LEGACY_IMPORT_ERROR}")
-        ckpt = torch.load(
-            TSMIXER_CHECKPOINT_PATH, map_location=device, weights_only=False
-        )
+        ckpt = torch.load(TSMIXER_CHECKPOINT_PATH, map_location=device, weights_only=False)
         ticker_to_id = ckpt.get("ticker_to_id", {})
         model = TSMixer(
             lookback=60,
@@ -923,21 +832,16 @@ def load_model(config, model_type="TFT"):
         ).to(device)
         model.load_state_dict(ckpt["model_state_dict"])
         model.eval()
-        return (
-            model,
-            True,
-            device,
-            {
-                "checkpoint": ckpt,
-                "experiment_path": os.path.dirname(TSMIXER_CHECKPOINT_PATH),
-            },
-        )
+        return model, True, device, {
+            "checkpoint": ckpt,
+            "experiment_path": os.path.dirname(TSMIXER_CHECKPOINT_PATH),
+        }
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
 
-    best_model_path = os.path.join(experiment_path, "checkpoints", "best_model.pth")
+    best_model_path = os.path.join(experiment_path, 'checkpoints', 'best_model.pth')
     if not os.path.exists(best_model_path):
-        best_model_path = os.path.join(experiment_path, "best_model.pth")
+        best_model_path = os.path.join(experiment_path, 'best_model.pth')
 
     model_loaded = False
     if os.path.exists(best_model_path):
@@ -968,50 +872,30 @@ def run_lstm_backtest(model, model_context, device, df, ticker, backtest_start_d
     context_end = find_date_position(dates, backtest_start_date)
     if context_end is None:
         start_date = pd.Timestamp(backtest_start_date).normalize()
-        raise ValueError(
-            f"Backtest start date {start_date:%Y-%m-%d} is not available after LSTM feature engineering."
-        )
+        raise ValueError(f"Backtest start date {start_date:%Y-%m-%d} is not available after LSTM feature engineering.")
 
     context_start = context_end - lookback
     actual_end = context_end + horizon
     if context_start < 0 or actual_end > len(features_df):
-        raise ValueError(
-            "Selected backtest window does not have enough LSTM context or ground truth."
-        )
+        raise ValueError("Selected backtest window does not have enough LSTM context or ground truth.")
 
     window = features_df[feature_names].to_numpy()[context_start:context_end]
 
     x = ckpt["feat_scaler"].transform(window).astype(np.float32)
     with torch.no_grad():
-        pred_scaled = (
-            model(torch.from_numpy(x).unsqueeze(0).to(device)).squeeze(0).cpu().numpy()
-        )
-    pred_returns = (
-        ckpt["target_scaler"].inverse_transform(pred_scaled.reshape(1, -1)).ravel()
-    )
+        pred_scaled = model(torch.from_numpy(x).unsqueeze(0).to(device)).squeeze(0).cpu().numpy()
+    pred_returns = ckpt["target_scaler"].inverse_transform(pred_scaled.reshape(1, -1)).ravel()
 
     close = close_by_date(legacy_df)
     context_dates = list(dates[context_start:context_end])
     actual_dates = list(dates[context_end:actual_end])
     history_dates = context_dates[-30:]
-    history_prices = (
-        close.reindex(pd.DatetimeIndex(history_dates)).ffill().to_numpy(dtype=float)
-    )
-    actual_prices = (
-        close.reindex(pd.DatetimeIndex(actual_dates)).ffill().to_numpy(dtype=float)
-    )
+    history_prices = close.reindex(pd.DatetimeIndex(history_dates)).ffill().to_numpy(dtype=float)
+    actual_prices = close.reindex(pd.DatetimeIndex(actual_dates)).ffill().to_numpy(dtype=float)
     pred_prices = reconstruct_prices(float(history_prices[-1]), pred_returns)
     if not np.isfinite(pred_prices).all() or not np.isfinite(actual_prices).all():
         raise ValueError("LSTM produced non-finite predicted prices.")
-    show_backtest_result(
-        ticker,
-        "LSTM",
-        history_dates,
-        history_prices,
-        actual_dates,
-        actual_prices,
-        pred_prices,
-    )
+    show_backtest_result(ticker, "LSTM", history_dates, history_prices, actual_dates, actual_prices, pred_prices)
 
 
 def run_tsmixer_backtest(model, model_context, device, df, ticker, backtest_start_date):
@@ -1034,60 +918,36 @@ def run_tsmixer_backtest(model, model_context, device, df, ticker, backtest_star
     scale = float(scaler_stats.get("scale", 1.0)) or 1.0
 
     x = raw_x.copy()
-    x[:, TSMIXER_TARGET_IDX] = ((x[:, TSMIXER_TARGET_IDX] - center) / scale).astype(
-        np.float32
-    )
+    x[:, TSMIXER_TARGET_IDX] = ((x[:, TSMIXER_TARGET_IDX] - center) / scale).astype(np.float32)
 
     dates = pd.DatetimeIndex(pd.to_datetime(features_df.index).normalize())
     context_end = find_date_position(dates, backtest_start_date)
     if context_end is None:
         start_date = pd.Timestamp(backtest_start_date).normalize()
-        raise ValueError(
-            f"Backtest start date {start_date:%Y-%m-%d} is not available after TSMixer feature engineering."
-        )
+        raise ValueError(f"Backtest start date {start_date:%Y-%m-%d} is not available after TSMixer feature engineering.")
 
     context_start = context_end - lookback
     actual_end = context_end + horizon
     if context_start < 0 or actual_end > len(x):
-        raise ValueError(
-            "Selected backtest window does not have enough TSMixer context or ground truth."
-        )
+        raise ValueError("Selected backtest window does not have enough TSMixer context or ground truth.")
 
     window = x[context_start:context_end]
 
     ticker_to_id = ckpt.get("ticker_to_id", {})
-    ticker_id = torch.tensor(
-        [int(ticker_to_id.get(ticker_key, 0))], device=device, dtype=torch.long
-    )
+    ticker_id = torch.tensor([int(ticker_to_id.get(ticker_key, 0))], device=device, dtype=torch.long)
     with torch.no_grad():
-        pred_scaled = (
-            model(torch.from_numpy(window).unsqueeze(0).to(device), ticker_id=ticker_id)
-            .cpu()
-            .numpy()[0]
-        )
+        pred_scaled = model(torch.from_numpy(window).unsqueeze(0).to(device), ticker_id=ticker_id).cpu().numpy()[0]
     pred_returns = pred_scaled * scale + center
 
     close = close_by_date(legacy_df)
-    history_dates = list(dates[max(context_start, context_end - 30) : context_end])
+    history_dates = list(dates[max(context_start, context_end - 30):context_end])
     actual_dates = list(dates[context_end:actual_end])
-    history_prices = (
-        close.reindex(pd.DatetimeIndex(history_dates)).ffill().to_numpy(dtype=float)
-    )
-    actual_prices = (
-        close.reindex(pd.DatetimeIndex(actual_dates)).ffill().to_numpy(dtype=float)
-    )
+    history_prices = close.reindex(pd.DatetimeIndex(history_dates)).ffill().to_numpy(dtype=float)
+    actual_prices = close.reindex(pd.DatetimeIndex(actual_dates)).ffill().to_numpy(dtype=float)
     pred_prices = reconstruct_prices(float(history_prices[-1]), pred_returns)
     if not np.isfinite(pred_prices).all() or not np.isfinite(actual_prices).all():
         raise ValueError("TSMixer produced non-finite predicted prices.")
-    show_backtest_result(
-        ticker,
-        "TSMixer",
-        history_dates,
-        history_prices,
-        actual_dates,
-        actual_prices,
-        pred_prices,
-    )
+    show_backtest_result(ticker, "TSMixer", history_dates, history_prices, actual_dates, actual_prices, pred_prices)
 
 
 def main():
@@ -1111,28 +971,12 @@ def main():
                 st.write(f"- {message}")
 
     popular_stocks = [
-        "AAPL",
-        "MSFT",
-        "NVDA",
-        "GOOGL",
-        "AMZN",
-        "META",
-        "TSLA",
-        "BRK-B",
-        "JPM",
-        "V",
-        "WMT",
-        "JNJ",
-        "PG",
-        "MA",
-        "HD",
+        "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN",
+        "META", "TSLA", "BRK-B", "JPM", "V",
+        "WMT", "JNJ", "PG", "MA", "HD"
     ]
-    model_choice = st.sidebar.selectbox(
-        "MODEL", [SELECT_PLACEHOLDER] + available_models
-    )
-    ticker = st.sidebar.selectbox(
-        "TICKER", options=[SELECT_PLACEHOLDER] + popular_stocks
-    )
+    model_choice = st.sidebar.selectbox("MODEL", [SELECT_PLACEHOLDER] + available_models)
+    ticker = st.sidebar.selectbox("TICKER", options=[SELECT_PLACEHOLDER] + popular_stocks)
     run_clicked = st.sidebar.button("Run Backtest")
 
     if model_choice == SELECT_PLACEHOLDER or ticker == SELECT_PLACEHOLDER:
@@ -1143,21 +987,17 @@ def main():
         return
 
     if "TFT-FinBERT" in model_choice and not TRANSFORMERS_AVAILABLE:
-        st.sidebar.error(
-            "Transformers library not available. Start Streamlit with:\n`python3 -m streamlit run demo/app.py --server.fileWatcherType none`"
-        )
+        st.sidebar.error("Transformers library not available. Start Streamlit with:\n`python3 -m streamlit run demo/app.py --server.fileWatcherType none`")
         return
 
     backtest_horizon = 5
     try:
         yaml_config = read_yaml(CONFIG_PATH)
-        tft_config = (
-            read_yaml(TFT_CONFIG_PATH) if os.path.exists(TFT_CONFIG_PATH) else {}
-        )
+        tft_config = read_yaml(TFT_CONFIG_PATH) if os.path.exists(TFT_CONFIG_PATH) else {}
         config = {**tft_config, **yaml_config}
-        config.setdefault("model", {})
-        config["model"]["output_size"] = backtest_horizon
-        config["num_articles"] = 4
+        config.setdefault('model', {})
+        config['model']['output_size'] = backtest_horizon
+        config['num_articles'] = 4
     except Exception as e:
         st.error(f"Error loading configs: {e}")
         return
@@ -1170,10 +1010,8 @@ def main():
         return
 
     processed_df = preprocess_data(df)
-    seq_len = int(config.get("HISTORY_WINDOW_SIZE", 60))
-    valid_backtest_dates = get_model_backtest_start_dates(
-        model_choice, df, processed_df, seq_len, backtest_horizon
-    )
+    seq_len = int(config.get('HISTORY_WINDOW_SIZE', 60))
+    valid_backtest_dates = get_model_backtest_start_dates(model_choice, df, processed_df, seq_len, backtest_horizon)
     if not valid_backtest_dates:
         st.error("Not enough data to create a backtest window with full ground truth.")
         return
@@ -1190,35 +1028,27 @@ def main():
     is_multimodal = "TFT-FinBERT" in model_choice
     with st.spinner(f"Loading {model_choice}..."):
         try:
-            model, model_loaded, device, experiment_path = load_model(
-                config, model_choice
-            )
+            model, model_loaded, device, experiment_path = load_model(config, model_choice)
         except RuntimeError as e:
             st.info(str(e))
             return
         model_type = model_choice.split(" ")[0]
 
     if not model_loaded:
-        st.sidebar.warning(
-            f"No pre-trained weights for {model_type}. Using untrained baseline."
-        )
+        st.sidebar.warning(f"No pre-trained weights for {model_type}. Using untrained baseline.")
     else:
         st.sidebar.success("weights loaded.")
 
     if "LSTM" in model_choice:
         try:
-            run_lstm_backtest(
-                model, experiment_path, device, df, ticker, backtest_start_date
-            )
+            run_lstm_backtest(model, experiment_path, device, df, ticker, backtest_start_date)
         except Exception as e:
             st.error(f"LSTM backtest failed: {e}")
         return
 
     if "TSMixer" in model_choice:
         try:
-            run_tsmixer_backtest(
-                model, experiment_path, device, df, ticker, backtest_start_date
-            )
+            run_tsmixer_backtest(model, experiment_path, device, df, ticker, backtest_start_date)
         except Exception as e:
             st.error(f"TSMixer backtest failed: {e}")
         return
@@ -1233,13 +1063,13 @@ def main():
             tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
             encoded = tokenizer(
                 news_articles,
-                padding="max_length",
+                padding='max_length',
                 truncation=True,
                 max_length=512,
-                return_tensors="pt",
+                return_tensors='pt'
             )
-            tokenized_news = encoded["input_ids"].unsqueeze(0).to(device)
-            attention_mask = encoded["attention_mask"].unsqueeze(0).to(device)
+            tokenized_news = encoded['input_ids'].unsqueeze(0).to(device)
+            attention_mask = encoded['attention_mask'].unsqueeze(0).to(device)
 
     try:
         model_input_data, actual_data = prepare_backtest_window(
@@ -1249,29 +1079,18 @@ def main():
         st.error(str(e))
         return
 
-    features = [
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "bb_upper",
-        "bb_middle",
-        "bb_lower",
-        "rsi",
-        "macd",
-        "macd_signal",
-        "macd_histogram",
-    ]
+    features = ['open', 'high', 'low', 'close', 'volume',
+                'bb_upper', 'bb_middle', 'bb_lower', 'rsi',
+                'macd', 'macd_signal', 'macd_histogram']
 
     X_raw = model_input_data[features].values
 
-    scaler_path = os.path.join(experiment_path, "preprocessed_data.pkl")
+    scaler_path = os.path.join(experiment_path, 'preprocessed_data.pkl')
     scaler = None
     if os.path.exists(scaler_path):
-        with open(scaler_path, "rb") as f:
+        with open(scaler_path, 'rb') as f:
             pp = pickle.load(f)
-            scaler = pp.get("scaler")
+            scaler = pp.get('scaler')
 
     if scaler is None:
         scaler = StandardScaler()
@@ -1286,21 +1105,17 @@ def main():
                 ticker_id = torch.tensor([0], dtype=torch.long).to(device)
                 sector_id = torch.tensor([0], dtype=torch.long).to(device)
 
-                preds_scaled = (
-                    model(
-                        tokenized_news_=tokenized_news,
-                        attention_mask_news_=attention_mask,
-                        time_series_features_=X_tensor,
-                        ticker_id_=ticker_id,
-                        sector_=sector_id,
-                    )
-                    .cpu()
-                    .numpy()[0]
-                )
+                preds_scaled = model(
+                    tokenized_news_=tokenized_news,
+                    attention_mask_news_=attention_mask,
+                    time_series_features_=X_tensor,
+                    ticker_id_=ticker_id,
+                    sector_=sector_id
+                ).cpu().numpy()[0]
             else:
                 preds_scaled = model(X_tensor).cpu().numpy()[0]
 
-        close_idx = features.index("close")
+        close_idx = features.index('close')
         close_mean = scaler.mean_[close_idx]
         close_std = scaler.scale_[close_idx]
         preds_raw = (preds_scaled * close_std) + close_mean
@@ -1310,19 +1125,11 @@ def main():
         return
 
     plot_days = 30
-    history_dates = model_input_data["date"].tolist()[-plot_days:]
-    history_prices = model_input_data["close"].values[-plot_days:]
-    actual_dates = actual_data["date"].tolist()
-    actual_prices = actual_data["close"].values
-    show_backtest_result(
-        ticker,
-        model_type,
-        history_dates,
-        history_prices,
-        actual_dates,
-        actual_prices,
-        preds_raw,
-    )
+    history_dates = model_input_data['date'].tolist()[-plot_days:]
+    history_prices = model_input_data['close'].values[-plot_days:]
+    actual_dates = actual_data['date'].tolist()
+    actual_prices = actual_data['close'].values
+    show_backtest_result(ticker, model_type, history_dates, history_prices, actual_dates, actual_prices, preds_raw)
 
     if is_multimodal and news_articles:
         with st.expander("News Context"):

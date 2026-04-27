@@ -32,16 +32,14 @@ PREDICT = ROOT / "predict"
 PLOTS = PREDICT / "plots"
 PLOTS.mkdir(parents=True, exist_ok=True)
 
-plt.rcParams.update(
-    {
-        "figure.dpi": 130,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.grid": True,
-        "grid.alpha": 0.25,
-        "font.size": 11,
-    }
-)
+plt.rcParams.update({
+    "figure.dpi": 130,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.grid": True,
+    "grid.alpha": 0.25,
+    "font.size": 11,
+})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -55,14 +53,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Days of history to show before the forecast window (default 30)",
     )
     ap.add_argument("--config", type=Path, default=ROOT / "configs" / "default.yaml")
-    ap.add_argument(
-        "--ckpt",
-        "--checkpoint",
-        dest="ckpt",
-        type=Path,
-        default=None,
-        help="Override checkpoint path",
-    )
+    ap.add_argument("--ckpt", "--checkpoint", dest="ckpt", type=Path, default=None, help="Override checkpoint path")
     ap.add_argument(
         "--data-dir",
         type=Path,
@@ -80,9 +71,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def load_artifacts(cfg_path: Path, ckpt_path: Path | None) -> tuple[dict, dict]:
     cfg = load_config(cfg_path)
-    resolved_ckpt = ROOT / cfg.get("artifacts", {}).get(
-        "checkpoint", "artifacts/model.pt"
-    )
+    resolved_ckpt = ROOT / cfg.get("artifacts", {}).get("checkpoint", "artifacts/model.pt")
     if ckpt_path is not None:
         resolved_ckpt = ckpt_path
     if not resolved_ckpt.exists():
@@ -125,9 +114,7 @@ def load_compare_window(
 
     missing = [name for name in feature_names if name not in feats.columns]
     if missing:
-        raise ValueError(
-            f"CSV features missing columns expected by checkpoint: {missing}"
-        )
+        raise ValueError(f"CSV features missing columns expected by checkpoint: {missing}")
 
     feats = feats[feature_names]
 
@@ -136,9 +123,7 @@ def load_compare_window(
 
     need = lookback + horizon
     if len(feats) < need:
-        raise ValueError(
-            f"Need >= {need} rows after feature engineering, got {len(feats)}"
-        )
+        raise ValueError(f"Need >= {need} rows after feature engineering, got {len(feats)}")
 
     ctx_end = len(feats) - horizon
     ctx_start = ctx_end - lookback
@@ -166,15 +151,11 @@ def load_latest_window(
 
     missing = [name for name in feature_names if name not in feats.columns]
     if missing:
-        raise ValueError(
-            f"CSV features missing columns expected by checkpoint: {missing}"
-        )
+        raise ValueError(f"CSV features missing columns expected by checkpoint: {missing}")
 
     feats = feats[feature_names]
     if len(feats) < lookback:
-        raise ValueError(
-            f"Need >= {lookback} rows after feature engineering, got {len(feats)}"
-        )
+        raise ValueError(f"Need >= {lookback} rows after feature engineering, got {len(feats)}")
 
     window_feats = feats.to_numpy()[-lookback:]
     anchor_date = pd.to_datetime(feats.index[-1]).tz_localize(None)
@@ -182,9 +163,7 @@ def load_latest_window(
 
 
 @torch.no_grad()
-def run_forecast(
-    model: LSTMForecaster, window_feats: np.ndarray, feat_scaler, target_scaler
-) -> np.ndarray:
+def run_forecast(model: LSTMForecaster, window_feats: np.ndarray, feat_scaler, target_scaler) -> np.ndarray:
     x = feat_scaler.transform(window_feats).astype(np.float32)
     pred_scaled = model(torch.from_numpy(x).unsqueeze(0)).squeeze(0).cpu().numpy()
     return target_scaler.inverse_transform(pred_scaled.reshape(1, -1)).ravel()
@@ -195,13 +174,11 @@ def log_rets_to_prices(base: float, log_rets: np.ndarray) -> np.ndarray:
 
 
 def print_latest_table(anchor_date: pd.Timestamp, pred_log_rets: np.ndarray) -> None:
-    out = pd.DataFrame(
-        {
-            "step": [f"day+{i + 1}" for i in range(len(pred_log_rets))],
-            "log_return": pred_log_rets,
-            "implied_return_%": (np.exp(pred_log_rets) - 1.0) * 100.0,
-        }
-    )
+    out = pd.DataFrame({
+        "step": [f"day+{i + 1}" for i in range(len(pred_log_rets))],
+        "log_return": pred_log_rets,
+        "implied_return_%": (np.exp(pred_log_rets) - 1.0) * 100.0,
+    })
     print(f"anchor date: {anchor_date}")
     print(out.to_string(index=False))
 
@@ -269,9 +246,7 @@ def plot(
         band = np.array(rmse_per_step[: len(pred_prices)], dtype=float)
         upper = [pivot_price] + [p * np.exp(r) for p, r in zip(pred_prices, band)]
         lower = [pivot_price] + [p * np.exp(-r) for p, r in zip(pred_prices, band)]
-        ax.fill_between(
-            all_pred_dates, lower, upper, alpha=0.12, color="#DD8452", label="+-1 RMSE"
-        )
+        ax.fill_between(all_pred_dates, lower, upper, alpha=0.12, color="#DD8452", label="+-1 RMSE")
 
     ax.axvline(pivot_date, color="gray", linestyle=":", linewidth=1.2)
     ax.text(
@@ -284,9 +259,7 @@ def plot(
         transform=ax.get_xaxis_transform(),
     )
 
-    ax.set_title(
-        f"{ticker.upper()} - {len(hist_prices)}-Day History + {len(act_prices)}-Day Forecast"
-    )
+    ax.set_title(f"{ticker.upper()} - {len(hist_prices)}-Day History + {len(act_prices)}-Day Forecast")
     ax.set_ylabel("Price ($)")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
     ax.legend(loc="best")
@@ -321,11 +294,7 @@ def main(argv: list[str] | None = None) -> None:
 
     lookback = int(ckpt["lookback"])
     horizon = int(ckpt["horizon"])
-    date_col = (
-        args.date_col
-        if args.date_col is not None
-        else cfg["data"].get("date_col", "Date")
-    )
+    date_col = args.date_col if args.date_col is not None else cfg["data"].get("date_col", "Date")
     csv_path = resolve_csv_path(args.ticker, data_dir, args.csv)
 
     model = build_model_from_ckpt(ckpt)
@@ -375,9 +344,7 @@ def main(argv: list[str] | None = None) -> None:
     print(f"\n{'':8} {'Pred log-ret':>12} {'Pred $':>10} {'Actual $':>10} {'Error':>8}")
     print("-" * 52)
     for i, (lr, pp, ap) in enumerate(zip(pred_log_rets, pred_prices, act_prices)):
-        print(
-            f"h+{i+1:<5}  {lr*100:>+10.3f}%  ${pp:>8.2f}  ${ap:>8.2f}  {pp-ap:>+7.2f}"
-        )
+        print(f"h+{i+1:<5}  {lr*100:>+10.3f}%  ${pp:>8.2f}  ${ap:>8.2f}  {pp-ap:>+7.2f}")
 
 
 if __name__ == "__main__":

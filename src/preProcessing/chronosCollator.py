@@ -70,23 +70,21 @@ class ChronosCollator:
             )
 
             # Pad input_ids and attention_mask to input_size windows with zeros
-            ids = inputs["input_ids"]  # (T, L)
+            ids = inputs["input_ids"]        # (T, L)
             mask = inputs["attention_mask"]  # (T, L)
             if T < input_size:
                 L = ids.shape[1]
                 pad = input_size - T
                 ids = torch.cat(
                     [ids, torch.zeros(pad, L, dtype=ids.dtype)], dim=0
-                )  # (input_size, L)
+                )   # (input_size, L)
                 mask = torch.cat(
                     [mask, torch.zeros(pad, L, dtype=mask.dtype)], dim=0
                 )  # (input_size, L)
 
             # Log returns instead of StandardScaler
             closes = self._replace_none_with_avg_np(closes)
-            log_prices = np.log(
-                np.clip(closes, 1e-8, None)
-            )  # keep log prices for target anchor
+            log_prices = np.log(np.clip(closes, 1e-8, None))   # keep log prices for target anchor
             log_returns = np.diff(log_prices)
             log_returns = np.concatenate([[0.0], log_returns]).astype(np.float32)
             mean = float(np.mean(log_returns))

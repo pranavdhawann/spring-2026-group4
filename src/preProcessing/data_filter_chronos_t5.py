@@ -2,7 +2,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-
 from tqdm import tqdm
 
 # Add project root to sys path
@@ -12,21 +11,9 @@ from src.utils.utils import load_stock_csv
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Filter Chronos data by specific criteria"
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        required=True,
-        help="Path to data directory containing CSVs",
-    )
-    parser.add_argument(
-        "--output_manifest",
-        type=str,
-        required=True,
-        help="Path to output JSON manifest",
-    )
+    parser = argparse.ArgumentParser(description="Filter Chronos data by specific criteria")
+    parser.add_argument("--data_dir", type=str, required=True, help="Path to data directory containing CSVs")
+    parser.add_argument("--output_manifest", type=str, required=True, help="Path to output JSON manifest")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -76,27 +63,25 @@ def main():
             # - less than 5% NaN in Close
             # - date span at least 2 years (~730 days)
             if total_rows >= 500 and nan_pct < 0.05 and date_span >= 730:
-                passed_tickers.append(
-                    {
-                        "ticker": ticker,
-                        "rows": int(total_rows),
-                        "nan_pct_close": float(nan_pct),
-                        "span_days": int(date_span),
-                        "file_path": str(csv_file),
-                    }
-                )
+                passed_tickers.append({
+                    "ticker": ticker,
+                    "rows": int(total_rows),
+                    "nan_pct_close": float(nan_pct),
+                    "span_days": int(date_span),
+                    "file_path": str(csv_file)
+                })
         except Exception:
             # Skip file on read or parse error
             pass
 
     # Output tally and logging
     passed_count = len(passed_tickers)
-    print("\n" + "=" * 50)
+    print("\n" + "="*50)
     print("Filtering complete.")
     print(f"Total CSVs parsed : {total_files}")
     print(f"Passed criteria   : {passed_count}")
     print(f"Failed criteria   : {total_files - passed_count}")
-    print("=" * 50)
+    print("="*50)
 
     # Save the manifest to JSON
     out_path.parent.mkdir(parents=True, exist_ok=True)

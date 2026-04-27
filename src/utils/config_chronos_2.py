@@ -59,7 +59,9 @@ def load_configs(
     base = Path(config_dir)
 
     model_path = (
-        Path(model_config_path) if model_config_path else base / "model_chronos_2.yaml"
+        Path(model_config_path)
+        if model_config_path
+        else base / "model_chronos_2.yaml"
     )
     dataset_path = (
         Path(dataset_config_path)

@@ -6,7 +6,6 @@ encoders_gnn.py — Modality encoders for the Temporal GNN.
 3. ReportsEncoder: Financial reports encoder — real SEC XBRL fundamentals
 """
 
-import logging
 import math
 from typing import Dict, List, Optional, Tuple
 
@@ -16,6 +15,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,27 +24,21 @@ logger = logging.getLogger(__name__)
 # 1. Time Series Encoder — TCN
 # ===========================================================================
 
-
 class CausalConv1d(nn.Module):
     """Causal convolution: output at time t only depends on inputs at times ≤ t."""
 
-    def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int, dilation: int = 1
-    ):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int, dilation: int = 1):
         super().__init__()
         self.padding = (kernel_size - 1) * dilation
         self.conv = nn.Conv1d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            padding=self.padding,
-            dilation=dilation,
+            in_channels, out_channels, kernel_size,
+            padding=self.padding, dilation=dilation,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv(x)
         if self.padding > 0:
-            out = out[:, :, : -self.padding]
+            out = out[:, :, :-self.padding]
         return out
 
 
@@ -98,30 +93,22 @@ class TCNEncoder(nn.Module):
       (c) gracefully reduces to the old behaviour if attention collapses.
     """
 
-    def __init__(
-        self, input_dim=21, channels=None, kernel_size=3, dropout=0.1, output_dim=256
-    ):
+    def __init__(self, input_dim=21, channels=None, kernel_size=3, dropout=0.1, output_dim=256):
         super().__init__()
         if channels is None:
             channels = [64, 128, 128, 256]
 
-        dilations = [2**i for i in range(len(channels))]
+        dilations = [2 ** i for i in range(len(channels))]
 
         layers = []
         for i, (out_ch, dilation) in enumerate(zip(channels, dilations)):
             in_ch = input_dim if i == 0 else channels[i - 1]
-            layers.append(
-                TCNResidualBlock(in_ch, out_ch, kernel_size, dilation, dropout)
-            )
+            layers.append(TCNResidualBlock(in_ch, out_ch, kernel_size, dilation, dropout))
 
         self.network = nn.Sequential(*layers)
         # Attention pool over the time axis: scalar score per timestep.
         self.temporal_attn = nn.Linear(channels[-1], 1)
-        self.output_proj = (
-            nn.Linear(channels[-1], output_dim)
-            if channels[-1] != output_dim
-            else nn.Identity()
-        )
+        self.output_proj = nn.Linear(channels[-1], output_dim) if channels[-1] != output_dim else nn.Identity()
 
     def forward(self, x):
         """x: (B, W, input_dim) → (B, output_dim)
@@ -129,18 +116,18 @@ class TCNEncoder(nn.Module):
         Returns an attention-weighted pool across the full W-day window plus
         a residual on the last timestep.
         """
-        x = x.transpose(1, 2)  # (B, input_dim, W)
-        out = self.network(x)  # (B, C, W)
-        out_tw = out.transpose(1, 2)  # (B, W, C)
+        x = x.transpose(1, 2)            # (B, input_dim, W)
+        out = self.network(x)             # (B, C, W)
+        out_tw = out.transpose(1, 2)      # (B, W, C)
 
         # Attention weights over time.
-        attn_scores = self.temporal_attn(out_tw)  # (B, W, 1)
-        attn_weights = torch.softmax(attn_scores, dim=1)  # (B, W, 1)
-        attn_pooled = (out_tw * attn_weights).sum(dim=1)  # (B, C)
+        attn_scores = self.temporal_attn(out_tw)           # (B, W, 1)
+        attn_weights = torch.softmax(attn_scores, dim=1)   # (B, W, 1)
+        attn_pooled = (out_tw * attn_weights).sum(dim=1)   # (B, C)
 
         # Residual on the last timestep (the causal-conv invariant path).
-        last_step = out[:, :, -1]  # (B, C)
-        pooled = attn_pooled + last_step  # (B, C)
+        last_step = out[:, :, -1]                          # (B, C)
+        pooled = attn_pooled + last_step                    # (B, C)
         return self.output_proj(pooled)
 
 
@@ -148,54 +135,36 @@ class TCNEncoder(nn.Module):
 # 1b. Time Series Encoder — Transformer
 # ===========================================================================
 
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=512, dropout=0.1):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
-        )
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)
         self.register_buffer("pe", pe)
 
     def forward(self, x):
-        x = x + self.pe[:, : x.size(1)]
+        x = x + self.pe[:, :x.size(1)]
         return self.dropout(x)
 
 
 class TransformerTSEncoder(nn.Module):
-    def __init__(
-        self,
-        input_dim=21,
-        d_model=256,
-        nhead=4,
-        num_layers=4,
-        dropout=0.1,
-        output_dim=256,
-    ):
+    def __init__(self, input_dim=21, d_model=256, nhead=4, num_layers=4, dropout=0.1, output_dim=256):
         super().__init__()
         self.input_proj = nn.Linear(input_dim, d_model)
         self.pos_enc = PositionalEncoding(d_model, dropout=dropout)
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=d_model * 4,
-            dropout=dropout,
-            activation="gelu",
-            batch_first=True,
-            norm_first=True,
+            d_model=d_model, nhead=nhead, dim_feedforward=d_model * 4,
+            dropout=dropout, activation="gelu", batch_first=True, norm_first=True,
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         # FIX E7: attention pool over time instead of last-step-only.
         self.temporal_attn = nn.Linear(d_model, 1)
-        self.output_proj = (
-            nn.Linear(d_model, output_dim) if d_model != output_dim else nn.Identity()
-        )
+        self.output_proj = nn.Linear(d_model, output_dim) if d_model != output_dim else nn.Identity()
 
     def _generate_causal_mask(self, seq_len, device):
         mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
@@ -210,11 +179,11 @@ class TransformerTSEncoder(nn.Module):
         x = self.input_proj(x)
         x = self.pos_enc(x)
         mask = self._generate_causal_mask(x.size(1), x.device)
-        x = self.transformer(x, mask=mask)  # (B, W, d_model)
+        x = self.transformer(x, mask=mask)                 # (B, W, d_model)
 
-        attn_scores = self.temporal_attn(x)  # (B, W, 1)
-        attn_weights = torch.softmax(attn_scores, dim=1)  # (B, W, 1)
-        pooled = (x * attn_weights).sum(dim=1)  # (B, d_model)
+        attn_scores = self.temporal_attn(x)                 # (B, W, 1)
+        attn_weights = torch.softmax(attn_scores, dim=1)    # (B, W, 1)
+        pooled = (x * attn_weights).sum(dim=1)              # (B, d_model)
         last_step = x[:, -1, :]
         pooled = pooled + last_step
         return self.output_proj(pooled)
@@ -238,12 +207,10 @@ def build_ts_encoder(config: dict) -> nn.Module:
         )
     elif encoder_type == "transformer":
         return TransformerTSEncoder(
-            input_dim=input_dim,
-            d_model=output_dim,
+            input_dim=input_dim, d_model=output_dim,
             nhead=model_cfg.get("transformer_heads", 4),
             num_layers=model_cfg.get("transformer_layers", 4),
-            dropout=dropout,
-            output_dim=output_dim,
+            dropout=dropout, output_dim=output_dim,
         )
     else:
         raise ValueError(f"Unknown ts_encoder: {encoder_type}")
@@ -252,7 +219,6 @@ def build_ts_encoder(config: dict) -> nn.Module:
 # ===========================================================================
 # 2. News Encoder
 # ===========================================================================
-
 
 class NewsEncoder(nn.Module):
     """

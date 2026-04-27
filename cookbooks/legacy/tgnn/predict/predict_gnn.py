@@ -18,6 +18,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.utils_gnn import (
+    build_trading_calendar,
+    DEFAULT_BEST_CHECKPOINT,
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_RESULTS_DIR,
+    get_device,
+    load_checkpoint,
+    load_config,
+    log_runtime_context,
+    resolve_data_path,
+    set_seed,
+    setup_logging,
+)
 from src.dataset_gnn import (
     FeatureBuilder,
     build_master_calendar,
@@ -28,20 +41,6 @@ from src.dataset_gnn import (
 )
 from src.graph_gnn import SectorEdgeBuilder
 from src.model_gnn import TemporalGNN
-from src.utils_gnn import (
-    DEFAULT_BEST_CHECKPOINT,
-    DEFAULT_CONFIG_PATH,
-    DEFAULT_RESULTS_DIR,
-    build_trading_calendar,
-    get_device,
-    load_checkpoint,
-    load_config,
-    log_runtime_context,
-    resolve_data_path,
-    set_seed,
-    setup_logging,
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +58,7 @@ def predict_single_date(
 ) -> List[dict]:
     """
     Generate predictions for all active stocks on a given date.
-
+    
     Args:
         config: Configuration dict
         model: Trained TemporalGNN
@@ -70,7 +69,7 @@ def predict_single_date(
         news_cache: Pre-loaded news embeddings
         device: Compute device
         mc_samples: Number of MC Dropout forward passes
-
+    
     Returns:
         List of prediction dicts (one per stock)
     """
@@ -93,7 +92,6 @@ def predict_single_date(
 
     if pred_date not in master_calendar:
         from src.utils_gnn import get_prev_trading_day
-
         pred_date = get_prev_trading_day(pred_date, master_calendar)
         logger.info("Adjusted prediction date to trading day: %s", pred_date.date())
 
@@ -120,32 +118,19 @@ def predict_single_date(
 
     ticker_to_local = {ticker: i for i, ticker in enumerate(active_tickers)}
     window_start = pred_idx - window_size
-    window_dates = [
-        str(master_calendar[t].date()) for t in range(window_start, pred_idx)
-    ]
+    window_dates = [str(master_calendar[t].date()) for t in range(window_start, pred_idx)]
 
-    ts_features = np.zeros(
-        (N, window_size, FeatureBuilder.NUM_FEATURES), dtype=np.float32
-    )
+    ts_features = np.zeros((N, window_size, FeatureBuilder.NUM_FEATURES), dtype=np.float32)
     last_close_list = []
     news_per_stock = []
     report_fundamentals = []
 
     for i, ticker in enumerate(active_tickers):
-        features, _ = feature_builder.build_features(
-            ticker_dfs[ticker], master_calendar
-        )
+        features, _ = feature_builder.build_features(ticker_dfs[ticker], master_calendar)
         if len(features) > 0:
-            ts_features[i] = features.iloc[window_start:pred_idx].values.astype(
-                np.float32
-            )
+            ts_features[i] = features.iloc[window_start:pred_idx].values.astype(np.float32)
 
-        close_series = (
-            ticker_dfs[ticker]
-            .set_index("date")["close"]
-            .reindex(master_calendar)
-            .ffill()
-        )
+        close_series = ticker_dfs[ticker].set_index("date")["close"].reindex(master_calendar).ffill()
         last_close_list.append(close_series.iloc[pred_idx])
 
         ticker_news = news_cache.get(ticker, {})
@@ -153,13 +138,10 @@ def predict_single_date(
         report_fundamentals.append(fundamentals.get(ticker))
 
     sector_builder = SectorEdgeBuilder(sectors_df)
-    sector_edge_index, sector_edge_attr = sector_builder.build(
-        active_tickers, ticker_to_local
-    )
+    sector_edge_index, sector_edge_attr = sector_builder.build(active_tickers, ticker_to_local)
 
     # FIX E3: build correlation edges for prediction too
     from src.graph_gnn import CorrelationEdgeBuilder
-
     graph_cfg = config.get("graph", {})
     corr_builder = CorrelationEdgeBuilder(
         top_k=graph_cfg.get("correlation_top_k", 10),
@@ -172,15 +154,11 @@ def predict_single_date(
         df = ticker_dfs[ticker]
         close_s = df.set_index("date")["close"].reindex(master_calendar).ffill()
         from src.utils_gnn import compute_log_returns
-
         lr = compute_log_returns(close_s).values
-        r = lr[max(0, pred_idx - corr_window) : pred_idx]
+        r = lr[max(0, pred_idx - corr_window):pred_idx]
         returns_dict[ticker] = np.nan_to_num(r, nan=0.0)
     corr_edge_index, corr_edge_attr = corr_builder.build(
-        pred_date,
-        returns_dict,
-        active_tickers,
-        ticker_to_local,
+        pred_date, returns_dict, active_tickers, ticker_to_local,
     )
 
     sample = {
@@ -225,9 +203,7 @@ def predict_single_date(
             forecast.append(
                 {
                     "day": k + 1,
-                    "date": str(future_dates[k].date())
-                    if k < len(future_dates)
-                    else f"T+{k + 1}",
+                    "date": str(future_dates[k].date()) if k < len(future_dates) else f"T+{k + 1}",
                     "log_return": round(float(mean_lr[i, k]), 6),
                     "predicted_close": round(float(price_mean[i, k]), 2),
                 }
@@ -257,57 +233,40 @@ def predict_single_date(
 # CLI
 # ===========================================================================
 
-
 def main():
     parser = argparse.ArgumentParser(description="Predict with Temporal GNN")
     parser.add_argument("--config", type=str, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--checkpoint", type=str, default=DEFAULT_BEST_CHECKPOINT)
-    parser.add_argument(
-        "--date", type=str, required=True, help="Prediction date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--output", type=str, default=None, help="Output JSON file path"
-    )
+    parser.add_argument("--date", type=str, required=True, help="Prediction date (YYYY-MM-DD)")
+    parser.add_argument("--output", type=str, default=None, help="Output JSON file path")
     parser.add_argument("--mc-samples", type=int, default=10, help="MC Dropout samples")
-    parser.add_argument(
-        "--ticker", type=str, default=None, help="Single ticker to predict (optional)"
-    )
+    parser.add_argument("--ticker", type=str, default=None, help="Single ticker to predict (optional)")
     args = parser.parse_args()
-
+    
     config = load_config(args.config)
-    log_path = setup_logging(
-        config, command_name="predict", config_path=args.config, args=args
-    )
+    log_path = setup_logging(config, command_name="predict", config_path=args.config, args=args)
     logger.info("Loaded config from %s", os.path.abspath(args.config))
     log_runtime_context("predict", config, extra={"prediction_log_path": log_path})
     set_seed(config.get("seed", 42))
     device = get_device()
-
+    
     data_cfg = config["data"]
     data_dir = data_cfg["data_dir"]
-
+    
     # Load data
     ts_subdir = data_cfg.get("time_series_dir", "sp500_time_series")
     ticker_dfs = load_time_series(data_dir, ts_subdir)
-    sectors_df = load_sectors(
-        data_dir, data_cfg.get("description_file", "sp500stock_data_description.csv")
-    )
-    fundamentals = load_fundamentals(
-        data_dir, data_cfg.get("table_dir", "sp500_table"), list(ticker_dfs.keys())
-    )
-    logger.info(
-        "Prediction data loaded | tickers=%d | sectors=%d",
-        len(ticker_dfs),
-        len(sectors_df),
-    )
-
+    sectors_df = load_sectors(data_dir, data_cfg.get("description_file", "sp500stock_data_description.csv"))
+    fundamentals = load_fundamentals(data_dir, data_cfg.get("table_dir", "sp500_table"), list(ticker_dfs.keys()))
+    logger.info("Prediction data loaded | tickers=%d | sectors=%d", len(ticker_dfs), len(sectors_df))
+    
     # Feature builder
     feature_builder = FeatureBuilder(
         clip_sigma=data_cfg.get("log_return_clip_sigma", 5.0),
         zscore_min_days=data_cfg.get("zscore_min_days", 60),
     )
     logger.info("Initialized feature builder for prediction")
-
+    
     # News cache
     _, news_cache_dir = resolve_data_path(
         data_dir,
@@ -316,49 +275,34 @@ def main():
         kind="directory",
     )
     news_cache = load_news_embeddings(news_cache_dir, list(ticker_dfs.keys()))
-
+    
     # Load model
     max_nodes = 550
     model = TemporalGNN(config, max_nodes=max_nodes).to(device)
     load_checkpoint(args.checkpoint, model)
-    logger.info(
-        "Loaded prediction checkpoint from %s", os.path.abspath(args.checkpoint)
-    )
-
+    logger.info("Loaded prediction checkpoint from %s", os.path.abspath(args.checkpoint))
+    
     # Predict
     predictions = predict_single_date(
-        config,
-        model,
-        args.date,
-        ticker_dfs,
-        sectors_df,
-        feature_builder,
-        news_cache,
-        fundamentals,
-        device,
+        config, model, args.date, ticker_dfs, sectors_df,
+        feature_builder, news_cache, fundamentals, device,
         mc_samples=args.mc_samples,
     )
-
+    
     # Filter by ticker if specified
     if args.ticker:
         predictions = [p for p in predictions if p["ticker"] == args.ticker.upper()]
-        logger.info(
-            "Filtered predictions to ticker=%s | remaining=%d",
-            args.ticker.upper(),
-            len(predictions),
-        )
-
+        logger.info("Filtered predictions to ticker=%s | remaining=%d", args.ticker.upper(), len(predictions))
+    
     # Output
-    output_path = args.output or os.path.join(
-        DEFAULT_RESULTS_DIR, f"predictions_{args.date}.json"
-    )
+    output_path = args.output or os.path.join(DEFAULT_RESULTS_DIR, f"predictions_{args.date}.json")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
+    
     with open(output_path, "w") as f:
         json.dump(predictions, f, indent=2)
-
+    
     logger.info(f"Saved {len(predictions)} predictions to {output_path}")
-
+    
     # Print sample
     if predictions:
         sample = predictions[0]

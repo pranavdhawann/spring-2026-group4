@@ -1,6 +1,5 @@
 """Train one global TSMixer pooled across all tickers."""
 from __future__ import annotations
-
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,9 +41,7 @@ class GlobalTrainCfg:
     num_workers: int = 0
 
 
-def _loader(
-    assets: List[AssetWindows], cfg: GlobalTrainCfg, shuffle: bool
-) -> DataLoader:
+def _loader(assets: List[AssetWindows], cfg: GlobalTrainCfg, shuffle: bool) -> DataLoader:
     ds = PooledWindowDataset(assets, cfg.lookback, cfg.horizon, target_scale=1.0)
     return DataLoader(
         ds,
@@ -94,9 +91,7 @@ def _build_scaler_tables(
     return id_to_ticker, centers, scales
 
 
-def _inverse_scale(
-    arr: np.ndarray, ids: np.ndarray, centers: np.ndarray, scales: np.ndarray
-) -> np.ndarray:
+def _inverse_scale(arr: np.ndarray, ids: np.ndarray, centers: np.ndarray, scales: np.ndarray) -> np.ndarray:
     c = centers[ids][:, None]
     s = scales[ids][:, None]
     return arr * s + c
@@ -129,13 +124,7 @@ def _all_metrics_from_outputs(
     tgt_raw = _inverse_scale(tgt, ids, centers, scales)
     pred_price = price_path_from_log_returns(anchors, pred_raw)
     tgt_price = price_path_from_log_returns(anchors, tgt_raw)
-    return (
-        all_metrics(pred_raw, tgt_raw, pred_price=pred_price, target_price=tgt_price),
-        pred_raw,
-        tgt_raw,
-        pred_price,
-        tgt_price,
-    )
+    return all_metrics(pred_raw, tgt_raw, pred_price=pred_price, target_price=tgt_price), pred_raw, tgt_raw, pred_price, tgt_price
 
 
 def _per_ticker_metrics(
@@ -185,12 +174,8 @@ def train_global(
         ticker_embed_dim=cfg.ticker_embed_dim,
     ).to(device)
 
-    loss_fn = ReturnLoss(
-        cfg.loss_type, cfg.huber_delta, cfg.quantile_lambda, cfg.quantile_q
-    )
-    opt = torch.optim.AdamW(
-        model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
-    )
+    loss_fn = ReturnLoss(cfg.loss_type, cfg.huber_delta, cfg.quantile_lambda, cfg.quantile_q)
+    opt = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg.epochs)
     id_to_ticker, centers, scales = _build_scaler_tables(ticker_to_id, target_scalers)
 
@@ -198,10 +183,8 @@ def train_global(
     best_epoch = -1
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(
-        f"Global train: train_windows={len(train_loader.dataset)} "
-        f"val_windows={len(val_loader.dataset)} test_windows={len(test_loader.dataset)} device={device}"
-    )
+    print(f"Global train: train_windows={len(train_loader.dataset)} "
+          f"val_windows={len(val_loader.dataset)} test_windows={len(test_loader.dataset)} device={device}")
 
     for epoch in range(cfg.epochs):
         model.train()
@@ -238,23 +221,14 @@ def train_global(
                 },
                 ckpt_path,
             )
-        val_metrics, vp_raw, vt_raw, vp_price, vt_price = _all_metrics_from_outputs(
-            vp, vt, vi, va, centers, scales
-        )
+        val_metrics, vp_raw, vt_raw, vp_price, vt_price = _all_metrics_from_outputs(vp, vt, vi, va, centers, scales)
         print(
             f"  epoch {epoch:03d} train={train_loss:.5f} val={val_loss:.5f} best={best_val:.5f}"
             f" DA={val_metrics['DirAcc']:.4f} MR={val_metrics['MR']:.4f}"
             f"{'  *' if improved else ''}"
         )
         if cfg.per_ticker_eval:
-            val_per_ticker = _per_ticker_metrics(
-                vp_raw,
-                vt_raw,
-                vi,
-                id_to_ticker,
-                pred_price=vp_price,
-                tgt_price=vt_price,
-            )
+            val_per_ticker = _per_ticker_metrics(vp_raw, vt_raw, vi, id_to_ticker, pred_price=vp_price, tgt_price=vt_price)
             da_mr = {
                 t: {"DA": round(m["DirAcc"], 4), "MR": round(m["MR"], 4)}
                 for t, m in val_per_ticker.items()
@@ -265,24 +239,12 @@ def train_global(
             break
 
     ckpt = torch.load(ckpt_path, map_location=device)
-    state_dict = (
-        ckpt["model_state_dict"]
-        if isinstance(ckpt, dict) and "model_state_dict" in ckpt
-        else ckpt
-    )
+    state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
     model.load_state_dict(state_dict)
 
     vp, vt, vi, va, _ = _run_eval(model, val_loader, loss_fn, device)
     tp, tt, ti, ta, _ = _run_eval(model, test_loader, loss_fn, device)
     val_agg, _, _, _, _ = _all_metrics_from_outputs(vp, vt, vi, va, centers, scales)
-    test_agg, tp_raw, tt_raw, tp_price, tt_price = _all_metrics_from_outputs(
-        tp, tt, ti, ta, centers, scales
-    )
-    test_per_ticker = (
-        _per_ticker_metrics(
-            tp_raw, tt_raw, ti, id_to_ticker, pred_price=tp_price, tgt_price=tt_price
-        )
-        if cfg.per_ticker_eval
-        else None
-    )
+    test_agg, tp_raw, tt_raw, tp_price, tt_price = _all_metrics_from_outputs(tp, tt, ti, ta, centers, scales)
+    test_per_ticker = _per_ticker_metrics(tp_raw, tt_raw, ti, id_to_ticker, pred_price=tp_price, tgt_price=tt_price) if cfg.per_ticker_eval else None
     return val_agg, test_agg, test_per_ticker

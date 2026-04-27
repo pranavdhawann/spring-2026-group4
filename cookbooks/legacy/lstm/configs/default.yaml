@@ -14,8 +14,8 @@ model:
   hidden1: 128
   hidden2: 64
   dropout: 0.2
-  output_bound: null
-
+  output_bound: null   
+  
 training:
   lr: 1.0e-3
   batch_size: 64

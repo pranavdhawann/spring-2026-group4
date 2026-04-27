@@ -74,14 +74,11 @@ def train(model: nn.Module, splits, cfg: TrainConfig) -> dict:
     )
     opt = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        opt,
-        mode="min",
-        factor=cfg.lr_factor,
-        patience=cfg.lr_patience,
+        opt, mode="min", factor=cfg.lr_factor, patience=cfg.lr_patience,
     )
 
     train_loader = _loader(splits.X_train, splits.y_train, cfg.batch_size, shuffle=True)
-    val_loader = _loader(splits.X_val, splits.y_val, cfg.batch_size, shuffle=False)
+    val_loader   = _loader(splits.X_val,   splits.y_val,   cfg.batch_size, shuffle=False)
 
     best_val = math.inf
     best_state = None
@@ -90,7 +87,7 @@ def train(model: nn.Module, splits, cfg: TrainConfig) -> dict:
 
     for epoch in range(1, cfg.epochs + 1):
         tr = _run_epoch(model, train_loader, loss_fn, device, opt, cfg.clip_norm)
-        va = _run_epoch(model, val_loader, loss_fn, device)
+        va = _run_epoch(model, val_loader,   loss_fn, device)
         sched.step(va)
         history["train"].append(tr)
         history["val"].append(va)
@@ -98,18 +95,14 @@ def train(model: nn.Module, splits, cfg: TrainConfig) -> dict:
         improved = va < best_val - 1e-6
         if improved:
             best_val = va
-            best_state = {
-                k: v.detach().cpu().clone() for k, v in model.state_dict().items()
-            }
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
             bad = 0
         else:
             bad += 1
 
-        print(
-            f"epoch {epoch:3d}  train={tr:.6f}  val={va:.6f}"
-            f"  lr={opt.param_groups[0]['lr']:.2e}"
-            f"{'  *' if improved else ''}"
-        )
+        print(f"epoch {epoch:3d}  train={tr:.6f}  val={va:.6f}"
+              f"  lr={opt.param_groups[0]['lr']:.2e}"
+              f"{'  *' if improved else ''}")
 
         if bad >= cfg.patience:
             print(f"early stop at epoch {epoch} (best val={best_val:.6f})")

@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 # Individual metrics
 # ---------------------------------------------------------------------------
 
-
 def mse(
     ground_truth: np.ndarray,
     forecast: np.ndarray,
@@ -125,16 +124,22 @@ def crps_ensemble(
     num_samples = samples.shape[1]
 
     # Term 1: E|X - y|  →  (1/S) * sum_i |x_i - y|
-    abs_errors = np.abs(samples - ground_truth[:, np.newaxis, :])  # (N, S, H)
+    abs_errors = np.abs(
+        samples - ground_truth[:, np.newaxis, :]
+    )  # (N, S, H)
     term1 = np.mean(abs_errors, axis=1)  # (N, H)
 
     # Term 2: spread via sorted samples
     # For sorted x_{(1)} <= ... <= x_{(S)}:
     #   E|X - X'| = (2 / S^2) * sum_i (2i - S - 1) * x_{(i)}
     sorted_samples = np.sort(samples, axis=1)  # (N, S, H)
-    weights = 2.0 * np.arange(1, num_samples + 1) - num_samples - 1.0  # shape (S,)
+    weights = (
+        2.0 * np.arange(1, num_samples + 1) - num_samples - 1.0
+    )  # shape (S,)
     weights = weights[np.newaxis, :, np.newaxis]  # (1, S, 1) for broadcasting
-    spread = np.sum(weights * sorted_samples, axis=1) / (num_samples**2)  # (N, H)
+    spread = np.sum(weights * sorted_samples, axis=1) / (
+        num_samples ** 2
+    )  # (N, H)
 
     crps_values = term1 - spread  # (N, H)
     return np.mean(crps_values, axis=1)  # (N,)
@@ -143,7 +148,6 @@ def crps_ensemble(
 # ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
-
 
 def compute_all_metrics(
     ground_truth: np.ndarray,

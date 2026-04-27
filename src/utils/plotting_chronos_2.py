@@ -71,9 +71,7 @@ def plot_stock_forecast(
     ctx_tail = np.asarray(context_values[-ctx_shown:], dtype=np.float64)
     pivot_price = float(ctx_tail[-1])
 
-    actual_values = np.concatenate(
-        [[pivot_price], np.asarray(ground_truth, dtype=np.float64)]
-    )
+    actual_values = np.concatenate([[pivot_price], np.asarray(ground_truth, dtype=np.float64)])
     predicted_values = np.concatenate(
         [[pivot_price], np.asarray(median_forecast, dtype=np.float64)]
     )
@@ -85,9 +83,9 @@ def plot_stock_forecast(
         history_x = pd.DatetimeIndex(
             pd.to_datetime(context_timestamps[-ctx_shown:])
         ).tz_localize(None)
-        forecast_x = pd.DatetimeIndex(pd.to_datetime(forecast_timestamps)).tz_localize(
-            None
-        )
+        forecast_x = pd.DatetimeIndex(
+            pd.to_datetime(forecast_timestamps)
+        ).tz_localize(None)
         pivot_x = history_x[-1]
         future_x = pd.DatetimeIndex([pivot_x, *forecast_x])
     else:
@@ -207,9 +205,7 @@ def plot_metrics_summary(
 
     ax.set_xticks(x)
     ax.set_xticklabels([m.upper() for m in metric_names])
-    ax.set_title(
-        "Aggregate Metrics Across All Evaluated Stocks", fontsize=13, fontweight="bold"
-    )
+    ax.set_title("Aggregate Metrics Across All Evaluated Stocks", fontsize=13, fontweight="bold")
     ax.set_ylabel("Value")
     ax.legend()
     ax.grid(True, axis="y", alpha=0.3)
@@ -251,18 +247,8 @@ def plot_metric_distribution(
 
     for ax, (name, values) in zip(axes, all_metrics.items()):
         ax.hist(values, bins=30, color="#3498db", alpha=0.7, edgecolor="white")
-        ax.axvline(
-            np.mean(values),
-            color="#e74c3c",
-            linestyle="--",
-            label=f"Mean: {np.mean(values):.3f}",
-        )
-        ax.axvline(
-            np.median(values),
-            color="#2ecc71",
-            linestyle="--",
-            label=f"Median: {np.median(values):.3f}",
-        )
+        ax.axvline(np.mean(values), color="#e74c3c", linestyle="--", label=f"Mean: {np.mean(values):.3f}")
+        ax.axvline(np.median(values), color="#2ecc71", linestyle="--", label=f"Median: {np.median(values):.3f}")
         ax.set_title(name.upper(), fontweight="bold")
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)

@@ -26,7 +26,7 @@ class LSTMForecaster(nn.Module):
         self.head = nn.Linear(hidden2, horizon)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x, _ = self.lstm1(x)  # return_sequences=True
+        x, _ = self.lstm1(x)           # return_sequences=True
         x = self.drop1(x)
         x, _ = self.lstm2(x)
         x = self.drop2(x[:, -1, :])

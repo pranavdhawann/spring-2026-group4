@@ -13,33 +13,19 @@ except ImportError:
     ChronosPipeline = None
 
 import sys
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.preProcessing.data_preprocessing_chronos_t5 import load_ticker
 from src.utils.utils import read_yaml, set_seed
 
 
 def get_args():
-    parser = argparse.ArgumentParser(
-        description="Zero-shot stock forecasting using Chronos"
-    )
-    parser.add_argument(
-        "--csv_path", type=str, required=True, help="Path to the ticker CSV data"
-    )
-    parser.add_argument(
-        "--target_column", type=str, default="Close", help="Target column to forecast"
-    )
+    parser = argparse.ArgumentParser(description="Zero-shot stock forecasting using Chronos")
+    parser.add_argument("--csv_path", type=str, required=True, help="Path to the ticker CSV data")
+    parser.add_argument("--target_column", type=str, default="Close", help="Target column to forecast")
     parser.add_argument("--horizon", type=int, default=7, help="Forecast horizon")
-    parser.add_argument(
-        "--num_samples",
-        type=int,
-        default=20,
-        help="Number of samples for probabilistic forecast",
-    )
+    parser.add_argument("--num_samples", type=int, default=20, help="Number of samples for probabilistic forecast")
     parser.add_argument("--device", type=str, default="cuda", help="Computation device")
-    parser.add_argument(
-        "--config", type=str, default=None, help="Path to config yaml file (optional)"
-    )
+    parser.add_argument("--config", type=str, default=None, help="Path to config yaml file (optional)")
     return parser.parse_args()
 
 
@@ -85,9 +71,7 @@ def main():
     print(f"Data loaded. Using last {context_len} points as context.")
 
     if ChronosPipeline is None:
-        raise ImportError(
-            "chronos package is not installed. Install requirements first."
-        )
+        raise ImportError("chronos package is not installed. Install requirements first.")
 
     print(f"Loading Chronos model '{config['model_name']}' on {config['device']}...")
     pipeline = ChronosPipeline.from_pretrained(
@@ -123,15 +107,9 @@ def main():
     high_plot = high_forecast
     if target_is_returns:
         last_close = float(close_values[-1])
-        median_plot = (
-            last_close * pd.Series(median_forecast).cumsum().apply(np.exp).to_numpy()
-        )
-        low_plot = (
-            last_close * pd.Series(low_forecast).cumsum().apply(np.exp).to_numpy()
-        )
-        high_plot = (
-            last_close * pd.Series(high_forecast).cumsum().apply(np.exp).to_numpy()
-        )
+        median_plot = last_close * pd.Series(median_forecast).cumsum().apply(np.exp).to_numpy()
+        low_plot = last_close * pd.Series(low_forecast).cumsum().apply(np.exp).to_numpy()
+        high_plot = last_close * pd.Series(high_forecast).cumsum().apply(np.exp).to_numpy()
 
     results_df = pd.DataFrame(
         {
@@ -140,9 +118,7 @@ def main():
             "Forecast_Median": median_forecast,
             "Forecast_P90": high_forecast,
             "Forecast_P10_Close": low_plot if target_is_returns else low_forecast,
-            "Forecast_Median_Close": median_plot
-            if target_is_returns
-            else median_forecast,
+            "Forecast_Median_Close": median_plot if target_is_returns else median_forecast,
             "Forecast_P90_Close": high_plot if target_is_returns else high_forecast,
         }
     )
@@ -152,21 +128,13 @@ def main():
     plot_dir = Path(config["plot_dir"])
     plot_dir.mkdir(parents=True, exist_ok=True)
     ticker = Path(args.csv_path).stem
-    out_plot_path = (
-        plot_dir / f"{ticker}_chronos_forecast_h{config['forecast_horizon']}.png"
-    )
+    out_plot_path = plot_dir / f"{ticker}_chronos_forecast_h{config['forecast_horizon']}.png"
 
     hist_dates = pd.to_datetime(close_dates[-context_len:])
     hist_vals = close_values[-context_len:]
 
     plt.figure(figsize=(10, 5))
-    plt.plot(
-        hist_dates,
-        hist_vals,
-        color="royalblue",
-        label=f"Historical {ticker} Close",
-        linewidth=2,
-    )
+    plt.plot(hist_dates, hist_vals, color="royalblue", label=f"Historical {ticker} Close", linewidth=2)
     plt.plot(
         forecast_dates,
         median_plot,

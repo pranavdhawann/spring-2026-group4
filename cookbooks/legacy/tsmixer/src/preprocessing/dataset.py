@@ -1,6 +1,5 @@
 """Windowed dataset for TSMixer. Targets = future log returns (scaled)."""
 from __future__ import annotations
-
 from pathlib import Path
 from typing import List, Tuple
 
@@ -15,22 +14,14 @@ TARGET_IDX = FEATURE_COLS.index("log_return")
 
 
 class WindowDataset(Dataset):
-    def __init__(
-        self,
-        features: np.ndarray,
-        lookback: int,
-        horizon: int,
-        target_scale: float = 1.0,
-    ):
+    def __init__(self, features: np.ndarray, lookback: int, horizon: int, target_scale: float = 1.0):
         self.X = features.astype(np.float32)
         self.L = lookback
         self.H = horizon
         self.scale = target_scale
         self.n = len(self.X) - lookback - horizon + 1
         if self.n <= 0:
-            raise ValueError(
-                f"Not enough rows: {len(self.X)} for L={lookback} H={horizon}"
-            )
+            raise ValueError(f"Not enough rows: {len(self.X)} for L={lookback} H={horizon}")
 
     def __len__(self) -> int:
         return self.n

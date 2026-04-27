@@ -36,22 +36,18 @@ def convert_X_to_tensors(X, device="cpu"):
     padded_ids = []
     padded_masks = []
     for sample in X:
-        ids = sample[0]  # (W, L)
-        mask = sample[
-            1
-        ]  # (W, L) — real mask from collator, preserves special tokens correctly
+        ids = sample[0]    # (W, L)
+        mask = sample[1]   # (W, L) — real mask from collator, preserves special tokens correctly
         W = ids.shape[0]
         if W < max_windows:
             pad = torch.zeros(max_windows - W, L, dtype=ids.dtype)
             ids = torch.cat([ids, pad], dim=0)
-            mask = torch.cat(
-                [mask, torch.zeros(max_windows - W, L, dtype=mask.dtype)], dim=0
-            )
+            mask = torch.cat([mask, torch.zeros(max_windows - W, L, dtype=mask.dtype)], dim=0)
         padded_ids.append(ids)
         padded_masks.append(mask)
 
-    input_ids = torch.stack(padded_ids)  # (B, max_windows, L)
-    attention_mask = torch.stack(padded_masks)  # (B, max_windows, L)
+    input_ids = torch.stack(padded_ids)       # (B, max_windows, L)
+    attention_mask = torch.stack(padded_masks) # (B, max_windows, L)
 
     closes = torch.stack(
         [torch.as_tensor(sample[2], dtype=torch.float) for sample in X]
@@ -150,11 +146,8 @@ def save_sample_forecast_plot(y_true, y_pred, epoch, save_dir, rmse=0.0):
         ax = axes[plot_idx // 2][plot_idx % 2]
         ax.plot(x_ticks, y_true[sample_idx], color="blue", label="True")
         ax.plot(
-            x_ticks,
-            y_pred[sample_idx],
-            color="orange",
-            linestyle="--",
-            label="Predicted",
+            x_ticks, y_pred[sample_idx],
+            color="orange", linestyle="--", label="Predicted",
         )
         ax.axvline(x=0, color="gray", linestyle=":", alpha=0.7, label="Forecast Start")
         ax.set_xlabel("Forecast Day")
@@ -398,7 +391,7 @@ def train(train_config):
         ),  # Default weight decay for all groups
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3, verbose=True
+        optimizer, mode='min', factor=0.5, patience=3, verbose=True
     )
 
     best_rmse = np.inf
@@ -436,10 +429,8 @@ def train(train_config):
             scaler.unscale_(optimizer)
 
             # skip batch if gradients are NaN to prevent training collapse
-            if any(
-                p.grad is not None and torch.isnan(p.grad).any()
-                for p in model.parameters()
-            ):
+            if any(p.grad is not None and torch.isnan(p.grad).any()
+                   for p in model.parameters()):
                 scaler.update()
                 optimizer.zero_grad()
                 continue
@@ -512,6 +503,7 @@ def train(train_config):
             f"SMAPE: {test_metrics['smape']:.2f}%"
         )
 
+
         avg_test_loss = test_loss / len(test_loader)
 
         test_losses.append(avg_test_loss)
@@ -562,18 +554,12 @@ def train(train_config):
                         ),
                         num_stocks_to_plot=min(3, X_batch["closes"].shape[0]),
                     )
-            with open(
-                os.path.join(config["experiment_path"], "best_metrics.json"), "w"
-            ) as f:
-                json.dump(
-                    {
-                        "best_epoch": epoch + 1,
-                        "train_metrics": train_metrics,
-                        "test_metrics": test_metrics,
-                    },
-                    f,
-                    indent=4,
-                )
+            with open(os.path.join(config["experiment_path"], "best_metrics.json"), "w") as f:
+                json.dump({
+                    "best_epoch": epoch + 1,
+                    "train_metrics": train_metrics,
+                    "test_metrics": test_metrics,
+                }, f, indent=4)
             epochs_without_improvement = 0
             print("     Best model saved!")
         else:
@@ -614,6 +600,6 @@ if __name__ == "__main__":
         "load_pre_trained": False,
         "sample_fraction": 1.0,
         "epochs": 12,
-        "batch_size": 4,
+        "batch_size": 4
     }
     train(train_config)

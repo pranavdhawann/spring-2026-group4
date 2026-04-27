@@ -26,9 +26,7 @@ from src.utils import load_config, set_seed
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", type=Path, default=ROOT / "configs" / "default.yaml")
-    ap.add_argument(
-        "--csv", type=Path, default=None, help="override data.csv from config"
-    )
+    ap.add_argument("--csv", type=Path, default=None, help="override data.csv from config")
     return ap.parse_args()
 
 
@@ -55,9 +53,7 @@ def main() -> None:
         train_frac=float(cfg["split"]["train"]),
         val_frac=float(cfg["split"]["val"]),
     )
-    print(
-        f"  train={splits.X_train.shape}  val={splits.X_val.shape}  test={splits.X_test.shape}"
-    )
+    print(f"  train={splits.X_train.shape}  val={splits.X_val.shape}  test={splits.X_test.shape}")
 
     bound = cfg["model"].get("output_bound")
     model = LSTMForecaster(

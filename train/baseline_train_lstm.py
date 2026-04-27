@@ -11,17 +11,9 @@ import csv
 import json
 import os
 import pickle
-
-<<<<<<< HEAD
-from pathlib import Path
-from typing import Dict, List, Optional
-
-=======
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-
->>>>>>> main
 
 import numpy as np
 import pandas as pd
@@ -31,24 +23,18 @@ from torch.utils.data import DataLoader
 
 from src.models.timeseries_lstm import LSTMForecaster
 from src.preProcessing.data_preprocessing_lstm import prepare_lstm_data
-
-<<<<<<< HEAD
-from src.utils import calculate_regression_metrics, print_metrics, read_yaml, set_seed
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments with overrides for YAML config."""
-    parser = argparse.ArgumentParser(description="Train LSTM forecasting baseline")
-=======
-from src.utils import calculate_regression_metrics, print_metrics, read_yaml, set_seed
-
+from src.utils import (
+    calculate_regression_metrics,
+    print_metrics,
+    read_yaml,
+    set_seed,
+)
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments with overrides for YAML config."""
     parser = argparse.ArgumentParser(
         description="Train LSTM forecasting baseline"
     )
->>>>>>> main
     parser.add_argument(
         "--config",
         type=str,
@@ -65,10 +51,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_config(args: argparse.Namespace) -> dict:
-<<<<<<< HEAD
-=======
 
->>>>>>> main
     main_config = read_yaml("config/config.yaml")
     lstm_config = read_yaml(args.config)
 
@@ -91,10 +74,6 @@ def load_config(args: argparse.Namespace) -> dict:
 
     return config
 
-<<<<<<< HEAD
-
-=======
->>>>>>> main
 class EarlyStopping:
     """
     Early stopping handler that monitors validation loss.
@@ -230,15 +209,9 @@ def evaluate(
     preds_orig = all_preds
     targets_orig = all_targets
     if target_scaler is not None:
-<<<<<<< HEAD
-        preds_orig = target_scaler.inverse_transform(all_preds.reshape(-1, 1)).reshape(
-            all_preds.shape
-        )
-=======
         preds_orig = target_scaler.inverse_transform(
             all_preds.reshape(-1, 1)
         ).reshape(all_preds.shape)
->>>>>>> main
         targets_orig = target_scaler.inverse_transform(
             all_targets.reshape(-1, 1)
         ).reshape(all_targets.shape)
@@ -281,10 +254,6 @@ def create_visualizations(
     """
     try:
         import matplotlib
-<<<<<<< HEAD
-
-=======
->>>>>>> main
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -329,11 +298,7 @@ def create_visualizations(
     for ticker_name, ticker_id in stocks_to_plot:
         preds, targets = per_stock_preds[ticker_id]
 
-<<<<<<< HEAD
-        n_samples = min(len(preds), 50)
-=======
-        n_samples = min(len(preds), 50)
->>>>>>> main
+        n_samples = min(len(preds), 50)  
         # Use 0-th step (t+1) for visualization to avoid overlapping/repeated points from flatten()
         preds_plot = preds[:n_samples, 0]
         targets_plot = targets[:n_samples, 0]
@@ -341,21 +306,9 @@ def create_visualizations(
 
         fig, axes = plt.subplots(3, 1, figsize=(14, 12))
 
-<<<<<<< HEAD
-        axes[0].plot(
-            x_axis, targets_plot, label="Actual (t+1)", linewidth=1.5, alpha=0.8
-        )
-        axes[0].plot(
-            x_axis, preds_plot, label="Predicted (t+1)", linewidth=1.5, alpha=0.8
-        )
-        axes[0].set_title(
-            f"{ticker_name} - Predicted vs Actual Stock Price (One-Step Ahead)"
-        )
-=======
         axes[0].plot(x_axis, targets_plot, label="Actual (t+1)", linewidth=1.5, alpha=0.8)
         axes[0].plot(x_axis, preds_plot, label="Predicted (t+1)", linewidth=1.5, alpha=0.8)
         axes[0].set_title(f"{ticker_name} - Predicted vs Actual Stock Price (One-Step Ahead)")
->>>>>>> main
         axes[0].set_xlabel("Time Step (Window Index)")
         axes[0].set_ylabel("Price ($)")
         axes[0].legend()
@@ -401,11 +354,7 @@ def save_artifacts(
     metrics_out = {**metrics, "best_epoch": best_epoch, "total_epochs": total_epochs}
     with open(output_dir / "metrics.json", "w") as f:
         json.dump(metrics_out, f, indent=2)
-<<<<<<< HEAD
-    print("  Saved: metrics.json")
-=======
     print(f"  Saved: metrics.json")
->>>>>>> main
 
     # 2. Hyperparameters JSON
     # Filter config to serialisable values
@@ -415,19 +364,11 @@ def save_artifacts(
             hyper[k] = v
     with open(output_dir / "hyperparameters.json", "w") as f:
         json.dump(hyper, f, indent=2)
-<<<<<<< HEAD
-    print("  Saved: hyperparameters.json")
-
-    # 3. Last model checkpoint
-    torch.save(model.state_dict(), output_dir / "last_model.pt")
-    print("  Saved: last_model.pt")
-=======
     print(f"  Saved: hyperparameters.json")
 
     # 3. Last model checkpoint
     torch.save(model.state_dict(), output_dir / "last_model.pt")
     print(f"  Saved: last_model.pt")
->>>>>>> main
 
     # 4. Model summary
     if hasattr(model, "get_model_summary"):
@@ -437,33 +378,21 @@ def save_artifacts(
         summary = f"Total parameters: {total_params:,}"
     with open(output_dir / "model_summary.txt", "w") as f:
         f.write(summary)
-<<<<<<< HEAD
-    print("  Saved: model_summary.txt")
-=======
     print(f"  Saved: model_summary.txt")
->>>>>>> main
 
     # 5. Training history CSV
     with open(output_dir / "training_history.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=training_history[0].keys())
         writer.writeheader()
         writer.writerows(training_history)
-<<<<<<< HEAD
-    print("  Saved: training_history.csv")
-=======
     print(f"  Saved: training_history.csv")
->>>>>>> main
 
     # 6. Scalers
     with open(output_dir / "scalers.pkl", "wb") as f:
         pickle.dump(
             {"feature_scaler": feature_scaler, "target_scaler": target_scaler}, f
         )
-<<<<<<< HEAD
-    print("  Saved: scalers.pkl")
-=======
     print(f"  Saved: scalers.pkl")
->>>>>>> main
 
 
 def get_top_tickers(config: dict, n: int = 10) -> List[str]:
@@ -524,51 +453,17 @@ def train(train_config: dict = None) -> None:
         ),
     }
 
-<<<<<<< HEAD
-    (
-        train_dataset,
-        val_dataset,
-        test_dataset,
-        feature_scaler,
-        target_scaler,
-    ) = prepare_lstm_data(data_config)
-=======
     train_dataset, val_dataset, test_dataset, feature_scaler, target_scaler = (
         prepare_lstm_data(data_config)
     )
->>>>>>> main
 
     actual_input_size = train_dataset.features.shape[2]
     config["input_size"] = actual_input_size
 
     batch_size = config.get("batch_size", 64)
-<<<<<<< HEAD
-    train_dl = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=2,
-        prefetch_factor=2,
-    )
-    val_dl = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=2,
-        prefetch_factor=2,
-    )
-    test_dl = DataLoader(
-        test_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=2,
-        prefetch_factor=2,
-    )
-=======
     train_dl = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, prefetch_factor=2)
     val_dl = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2, prefetch_factor=2)
     test_dl = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=2, prefetch_factor=2)
->>>>>>> main
 
     # 4. Model
     model_config = {
@@ -614,13 +509,9 @@ def train(train_config: dict = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     best_model_path = output_dir / "best_model.pt"
 
-<<<<<<< HEAD
-    early_stopping = EarlyStopping(patience=config.get("early_stopping_patience", 15))
-=======
     early_stopping = EarlyStopping(
         patience=config.get("early_stopping_patience", 15)
     )
->>>>>>> main
 
     # 7. Training loop
     n_epochs = config.get("epochs", 100)

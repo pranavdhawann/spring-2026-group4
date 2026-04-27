@@ -31,13 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-def generate_forecast_plots(
-    config,
-    checkpoint_path,
-    tickers=None,
-    max_stocks=50,
-    output_dir=os.path.join("tgnn", "results", "accuracy"),
-):
+def generate_forecast_plots(config, checkpoint_path, tickers=None, max_stocks=50, output_dir=os.path.join("tgnn", "results", "accuracy")):
     """
     Generate forecast vs actual plots for stocks.
 
@@ -48,28 +42,14 @@ def generate_forecast_plots(
         4. Plot and save
     """
     import matplotlib
-
     matplotlib.use("Agg")
-    import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
 
-    from src.dataset_gnn import (
-        FeatureBuilder,
-        TemporalGraphDataset,
-        load_fundamentals,
-        load_news_embeddings,
-        load_sectors,
-        load_time_series,
-    )
+    from src.dataset_gnn import FeatureBuilder, TemporalGraphDataset, load_fundamentals, load_news_embeddings, load_sectors, load_time_series
     from src.loss_gnn import reconstruct_prices
     from src.model_gnn import TemporalGNN
-    from src.utils_gnn import (
-        build_master_calendar,
-        get_device,
-        load_checkpoint,
-        set_seed,
-        temporal_train_val_test_split,
-    )
+    from src.utils_gnn import build_master_calendar, get_device, load_checkpoint, set_seed, temporal_train_val_test_split
 
     set_seed(config.get("seed", 42))
     device = get_device()
@@ -85,48 +65,29 @@ def generate_forecast_plots(
 
     # ── Load data ──
     logger.info("Loading data...")
-    ticker_dfs = load_time_series(
-        data_dir, data_cfg.get("time_series_dir", "sp500_time_series")
-    )
+    ticker_dfs = load_time_series(data_dir, data_cfg.get("time_series_dir", "sp500_time_series"))
 
     # FIX P2: Apply the same max_tickers filtering as build_dataloaders so
     # forecast plots use the same ticker set the model was trained on.
     max_tickers = data_cfg.get("max_tickers")
     if max_tickers is not None and max_tickers < len(ticker_dfs):
-        sorted_tickers = sorted(
-            ticker_dfs, key=lambda t: len(ticker_dfs[t]), reverse=True
-        )
+        sorted_tickers = sorted(ticker_dfs, key=lambda t: len(ticker_dfs[t]), reverse=True)
         ticker_dfs = {t: ticker_dfs[t] for t in sorted_tickers[:max_tickers]}
-        logger.info(
-            "Filtered to %d tickers (max_tickers=%d)", len(ticker_dfs), max_tickers
-        )
+        logger.info("Filtered to %d tickers (max_tickers=%d)", len(ticker_dfs), max_tickers)
 
-    sectors_df = load_sectors(
-        data_dir, data_cfg.get("description_file", "sp500stock_data_description.csv")
-    )
-    fundamentals = load_fundamentals(
-        data_dir, data_cfg.get("table_dir", "sp500_table"), list(ticker_dfs.keys())
-    )
+    sectors_df = load_sectors(data_dir, data_cfg.get("description_file", "sp500stock_data_description.csv"))
+    fundamentals = load_fundamentals(data_dir, data_cfg.get("table_dir", "sp500_table"), list(ticker_dfs.keys()))
     master_calendar = build_master_calendar(ticker_dfs)
-    news_cache = load_news_embeddings(
-        os.path.join(data_dir, "cache", "news_embeddings"), list(ticker_dfs.keys())
-    )
+    news_cache = load_news_embeddings(os.path.join(data_dir, "cache", "news_embeddings"), list(ticker_dfs.keys()))
 
     # Split to get test dates
     split_cfg = config["split"]
     _, _, test_dates = temporal_train_val_test_split(
-        master_calendar,
-        split_cfg.get("val_days", 45),
-        split_cfg.get("test_days", 45),
-        split_cfg.get("purge_days", 5),
-    )
+        master_calendar, split_cfg.get("val_days", 45),
+        split_cfg.get("test_days", 45), split_cfg.get("purge_days", 5))
 
-    feature_builder = FeatureBuilder(
-        data_cfg.get("log_return_clip_sigma", 5.0), data_cfg.get("zscore_min_days", 60)
-    )
-    feature_builder.compute_global_stats(
-        ticker_dfs, master_calendar[: len(master_calendar) - 100]
-    )
+    feature_builder = FeatureBuilder(data_cfg.get("log_return_clip_sigma", 5.0), data_cfg.get("zscore_min_days", 60))
+    feature_builder.compute_global_stats(ticker_dfs, master_calendar[:len(master_calendar) - 100])
 
     # ── Load model ──
     logger.info("Loading model...")
@@ -138,17 +99,9 @@ def generate_forecast_plots(
 
     # ── Build test dataset ──
     test_ds = TemporalGraphDataset(
-        config=config,
-        dates=test_dates,
-        ticker_dfs=ticker_dfs,
-        sectors_df=sectors_df,
-        feature_builder=feature_builder,
-        news_cache=news_cache,
-        fundamentals=fundamentals,
-        master_calendar=master_calendar,
-        max_nodes=550,
-        mode="test",
-    )
+        config=config, dates=test_dates, ticker_dfs=ticker_dfs, sectors_df=sectors_df,
+        feature_builder=feature_builder, news_cache=news_cache, fundamentals=fundamentals,
+        master_calendar=master_calendar, max_nodes=550, mode="test")
 
     # ── Determine which tickers to plot ──
     if tickers:
@@ -169,8 +122,8 @@ def generate_forecast_plots(
 
             output = model(sample, device=device)
             pred_lr = output["log_returns"].cpu().numpy()  # (N_T, 5)
-            last_close = sample["last_close"].numpy()  # (N_T,)
-            target_close = sample["target_close"].numpy()  # (N_T, 5)
+            last_close = sample["last_close"].numpy()       # (N_T,)
+            target_close = sample["target_close"].numpy()   # (N_T, 5)
             target_tickers = sample["target_tickers"]
             pred_date = sample["pred_date"]
 
@@ -182,8 +135,8 @@ def generate_forecast_plots(
                 if ticker in plot_tickers:
                     ticker_forecasts[ticker] = {
                         "pred_date": pred_date,
-                        "pred_close": pred_close[i],  # (5,)
-                        "actual_close": target_close[i],  # (5,)
+                        "pred_close": pred_close[i],      # (5,)
+                        "actual_close": target_close[i],   # (5,)
                         "last_close": last_close[i],
                     }
 
@@ -218,7 +171,7 @@ def generate_forecast_plots(
         # 60-day history
         history_days = 60
         hist_start = max(0, pred_idx - history_days)
-        hist_dates = master_calendar[hist_start : pred_idx + 1]
+        hist_dates = master_calendar[hist_start:pred_idx + 1]
         hist_prices = []
         for d in hist_dates:
             if d in df_close.index:
@@ -243,21 +196,15 @@ def generate_forecast_plots(
         if len(forecast_dates) != horizon:
             continue
 
-        pred_close = fc["pred_close"][: len(forecast_dates)]
-        actual_close = fc["actual_close"][: len(forecast_dates)]
+        pred_close = fc["pred_close"][:len(forecast_dates)]
+        actual_close = fc["actual_close"][:len(forecast_dates)]
 
         # ── Plot ──
         fig, ax = plt.subplots(figsize=(14, 6))
 
         # History
-        ax.plot(
-            hist_prices.index,
-            hist_prices.values,
-            color="#2196F3",
-            linewidth=1.5,
-            label="Historical Close",
-            zorder=2,
-        )
+        ax.plot(hist_prices.index, hist_prices.values,
+                color="#2196F3", linewidth=1.5, label="Historical Close", zorder=2)
 
         # Connecting line from last history point to first forecast point
         connect_dates = [hist_prices.index[-1], forecast_dates[0]]
@@ -265,67 +212,32 @@ def generate_forecast_plots(
         connect_pred = [hist_prices.values[-1], pred_close[0]]
 
         # Forecast
-        ax.plot(
-            forecast_dates,
-            pred_close,
-            color="#FF5722",
-            linewidth=2.5,
-            marker="o",
-            markersize=7,
-            label="Forecast (5-day)",
-            zorder=4,
-        )
-        ax.plot(
-            connect_dates,
-            connect_pred,
-            color="#FF5722",
-            linewidth=1.5,
-            linestyle="--",
-            alpha=0.5,
-            zorder=3,
-        )
+        ax.plot(forecast_dates, pred_close,
+                color="#FF5722", linewidth=2.5, marker="o", markersize=7,
+                label="Forecast (5-day)", zorder=4)
+        ax.plot(connect_dates, connect_pred, color="#FF5722", linewidth=1.5,
+                linestyle="--", alpha=0.5, zorder=3)
 
         # Actual future
-        ax.plot(
-            forecast_dates,
-            actual_close,
-            color="#4CAF50",
-            linewidth=2.5,
-            marker="s",
-            markersize=7,
-            label="Actual (5-day)",
-            zorder=4,
-        )
-        ax.plot(
-            connect_dates,
-            connect_actual,
-            color="#4CAF50",
-            linewidth=1.5,
-            linestyle="--",
-            alpha=0.5,
-            zorder=3,
-        )
+        ax.plot(forecast_dates, actual_close,
+                color="#4CAF50", linewidth=2.5, marker="s", markersize=7,
+                label="Actual (5-day)", zorder=4)
+        ax.plot(connect_dates, connect_actual, color="#4CAF50", linewidth=1.5,
+                linestyle="--", alpha=0.5, zorder=3)
 
         # Vertical line at prediction boundary
-        ax.axvline(
-            x=pred_date, color="gray", linestyle=":", alpha=0.7, label="Prediction Date"
-        )
+        ax.axvline(x=pred_date, color="gray", linestyle=":", alpha=0.7, label="Prediction Date")
 
         # Shade forecast region
         ax.axvspan(forecast_dates[0], forecast_dates[-1], alpha=0.06, color="orange")
 
         # Compute error for annotation
         mae = np.mean(np.abs(pred_close - actual_close))
-        mape = (
-            np.mean(np.abs((pred_close - actual_close) / (actual_close + 1e-8))) * 100
-        )
+        mape = np.mean(np.abs((pred_close - actual_close) / (actual_close + 1e-8))) * 100
 
-        ax.set_title(
-            f"{ticker} — 60-Day History + 5-Day Forecast\n"
-            f"MAE: ${mae:.2f}  |  MAPE: {mape:.2f}%  |  Pred Date: {pred_date_str}",
-            fontsize=13,
-            fontweight="bold",
-        )
+        ax.set_title(f"{ticker} — 60-Day History + 5-Day Forecast\n"
+                     f"MAE: ${mae:.2f}  |  MAPE: {mape:.2f}%  |  Pred Date: {pred_date_str}",
+                     fontsize=13, fontweight="bold")
         ax.set_xlabel("Date", fontsize=11)
         ax.set_ylabel("Close Price ($)", fontsize=11)
         ax.legend(loc="upper left", fontsize=10)
@@ -348,41 +260,21 @@ def generate_forecast_plots(
 def main():
     parser = argparse.ArgumentParser(description="Generate forecast accuracy plots")
     parser.add_argument("--config", default=os.path.join("config", "config_gnn.yaml"))
-    parser.add_argument(
-        "--checkpoint", default=os.path.join("tgnn", "checkpoints", "best.pt")
-    )
-    parser.add_argument(
-        "--tickers",
-        default=None,
-        help="Comma-separated tickers (e.g. AAPL,MSFT). Default: all in test set",
-    )
-    parser.add_argument(
-        "--max-stocks", type=int, default=50, help="Max number of plots to generate"
-    )
-    parser.add_argument(
-        "--output-dir", default=os.path.join("tgnn", "results", "accuracy")
-    )
+    parser.add_argument("--checkpoint", default=os.path.join("tgnn", "checkpoints", "best.pt"))
+    parser.add_argument("--tickers", default=None, help="Comma-separated tickers (e.g. AAPL,MSFT). Default: all in test set")
+    parser.add_argument("--max-stocks", type=int, default=50, help="Max number of plots to generate")
+    parser.add_argument("--output-dir", default=os.path.join("tgnn", "results", "accuracy"))
     args = parser.parse_args()
 
     from src.utils_gnn import load_config, log_runtime_context, setup_logging
-
     config = load_config(args.config)
-    log_path = setup_logging(
-        config, command_name="forecast_plot", config_path=args.config, args=args
-    )
+    log_path = setup_logging(config, command_name="forecast_plot", config_path=args.config, args=args)
     logger.info("Loaded config from %s", os.path.abspath(args.config))
-    log_runtime_context(
-        "forecast_plot", config, extra={"forecast_plot_log_path": log_path}
-    )
+    log_runtime_context("forecast_plot", config, extra={"forecast_plot_log_path": log_path})
 
     tickers = args.tickers.split(",") if args.tickers else None
-    generate_forecast_plots(
-        config,
-        args.checkpoint,
-        tickers=tickers,
-        max_stocks=args.max_stocks,
-        output_dir=args.output_dir,
-    )
+    generate_forecast_plots(config, args.checkpoint, tickers=tickers,
+                            max_stocks=args.max_stocks, output_dir=args.output_dir)
 
 
 if __name__ == "__main__":

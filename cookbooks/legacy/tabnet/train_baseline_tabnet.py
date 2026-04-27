@@ -1,25 +1,21 @@
 import os
-
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 import json
+
 from datetime import datetime, timedelta
 from pathlib import Path
-
 import numpy as np
 import torch
+from src.preProcessing import build_tabnet_features
 
 from src.models.tabnet_forecasting import TabNetForecasting
-from src.preProcessing import build_tabnet_features
 from src.utils import read_json_file, read_yaml, set_seed
 from src.utils.metrics_utils import calculate_regression_metrics, print_metrics
 
 _original_set_seed = set_seed
-
-
 def _safe_set_seed(seed=42):
     import random
-
     random.seed(seed)
     np.random.seed(seed)
     if torch.cuda.is_available():
@@ -33,7 +29,6 @@ def _safe_set_seed(seed=42):
 
 
 import src.utils.utils as utils_module
-
 utils_module.set_seed = _safe_set_seed
 set_seed = _safe_set_seed
 
@@ -96,7 +91,9 @@ def _build_features_with_encoder(config, use_nlp_encoder: bool = True):
         if enc is not None:
             text_encoder = enc
             text_dim = 64
-    return build_tabnet_features(config, text_encoder=text_encoder, text_dim=text_dim)
+    return build_tabnet_features(
+        config, text_encoder=text_encoder, text_dim=text_dim
+    )
 
 
 def _save_metrics(metrics: dict, out_dir: Path):
@@ -116,7 +113,6 @@ def _generate_plots(
     max_plots: int = 10,
 ):
     import matplotlib
-
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -136,9 +132,7 @@ def _generate_plots(
         n_hist = len(dates)
         n_fut = len(actual)
         try:
-            last_d = (
-                datetime.strptime(dates[-1], "%Y-%m-%d") if dates else datetime.now()
-            )
+            last_d = datetime.strptime(dates[-1], "%Y-%m-%d") if dates else datetime.now()
         except Exception:
             last_d = datetime.now()
         future_dates = [
@@ -149,16 +143,11 @@ def _generate_plots(
         x_hist = list(range(n_hist))
         x_fut = list(range(n_hist, n_hist + n_fut))
 
+
+
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.axvline(x=n_hist - 0.5, color="gray", linestyle="--", alpha=0.7)
-        ax.scatter(
-            [n_hist - 1],
-            [input_price],
-            color="blue",
-            s=80,
-            zorder=5,
-            label="Input (last close)",
-        )
+        ax.scatter([n_hist - 1], [input_price], color="blue", s=80, zorder=5, label="Input (last close)")
         ax.plot(x_fut, pred, "o-", color="green", label="Predicted", markersize=6)
         ax.plot(x_fut, actual, "s-", color="red", label="Actual", markersize=6)
         ax.set_xticks(list(range(len(all_dates))))
@@ -171,6 +160,7 @@ def _generate_plots(
         plt.tight_layout()
         plt.savefig(out_dir / f"plot_sample_{i+1}.png", dpi=150)
         plt.close()
+
 
     if n_plots >= 1 and meta_test and len(meta_test[0].get("dates", [])) > 0:
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -187,13 +177,7 @@ def _generate_plots(
         all_dates = hist_dates + future_dates
         x_hist_last = len(hist_dates) - 1
         x_fut = list(range(len(hist_dates), len(all_dates)))
-        ax.scatter(
-            [x_hist_last],
-            [meta.get("input_price")],
-            color="blue",
-            s=80,
-            label="Input price",
-        )
+        ax.scatter([x_hist_last], [meta.get("input_price")], color="blue", s=80, label="Input price")
         ax.plot(x_fut, y_pred[0], "g-o", label="Predicted price", markersize=6)
         ax.plot(x_fut, y_test[0], "r-s", label="Actual price", markersize=6)
         ax.set_xticks(range(len(all_dates)))
@@ -209,10 +193,9 @@ def _generate_plots(
 
     print(f"Saved up to {n_plots + 1} plots to {out_dir}")
 
-
 def train(train_config: dict = None):
-    import random
 
+    import random
     random.seed(42)
     np.random.seed(42)
 
@@ -229,15 +212,8 @@ def train(train_config: dict = None):
 
     tabnet_config_path = project_root / "config" / "tabnet_config.yaml"
     tabnet_config = read_yaml(str(tabnet_config_path))
-    config["experiment_path"] = str(
-        project_root
-        / tabnet_config.get(
-            "experiment_path", "experiments/baseline/baseline_results_tabnet"
-        )
-    )
-    config.setdefault("preprocessing", {}).update(
-        tabnet_config.get("preprocessing", {})
-    )
+    config["experiment_path"] = str(project_root / tabnet_config.get("experiment_path", "experiments/baseline/baseline_results_tabnet"))
+    config.setdefault("preprocessing", {}).update(tabnet_config.get("preprocessing", {}))
     config["text_encoding"] = tabnet_config.get("text_encoding", {})
 
     ticker2idx = read_json_file(
@@ -251,14 +227,9 @@ def train(train_config: dict = None):
     config.update(data_config)
 
     print("Building TabNet features from baseline JSONL...")
-    (
-        X_train,
-        y_train,
-        X_test,
-        y_test,
-        meta_train,
-        meta_test,
-    ) = _build_features_with_encoder(config, use_nlp_encoder=True)
+    X_train, y_train, X_test, y_test, meta_train, meta_test = _build_features_with_encoder(
+        config, use_nlp_encoder=True
+    )
 
     y_train_fit = np.nan_to_num(y_train, nan=0.0)
     y_test_flat = y_test.flatten()
@@ -278,7 +249,7 @@ def train(train_config: dict = None):
     torch.use_deterministic_algorithms(False)
     torch.backends.cudnn.deterministic = False
     torch.backends.cudnn.benchmark = True
-
+    
     print("Training TabNet...")
     model.fit(X_tr, y_tr, X_val=X_val, y_val=y_val)
 
@@ -290,14 +261,13 @@ def train(train_config: dict = None):
     y_test_flat = y_test.flatten()
     valid = ~np.isnan(y_test_flat)
     if np.any(valid):
-        metrics = calculate_regression_metrics(y_test_flat[valid], y_pred_flat[valid])
+        metrics = calculate_regression_metrics(
+            y_test_flat[valid], y_pred_flat[valid]
+        )
     else:
         metrics = {
-            "mae": float("nan"),
-            "mse": float("nan"),
-            "rmse": float("nan"),
-            "mape": float("nan"),
-            "smape": float("nan"),
+            "mae": float("nan"), "mse": float("nan"), "rmse": float("nan"),
+            "mape": float("nan"), "smape": float("nan"),
         }
     print_metrics(metrics, prefix="Test")
     try:
@@ -312,9 +282,7 @@ def train(train_config: dict = None):
     except Exception as e:
         print(f"WARNING: Could not save plots: {e}")
         import traceback
-
         traceback.print_exc()
-
 
 if __name__ == "__main__":
     train()

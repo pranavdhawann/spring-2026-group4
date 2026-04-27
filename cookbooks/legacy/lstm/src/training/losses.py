@@ -47,7 +47,7 @@ class BoundedAntiZeroHuber(nn.Module):
         if self.mag_weight_alpha <= 0:
             return huber_elem.mean()
         norm_mag = torch.abs(target) / self.mag_weight_scale
-        weights = 1.0 + self.mag_weight_alpha * (norm_mag**self.mag_weight_power)
+        weights = 1.0 + self.mag_weight_alpha * (norm_mag ** self.mag_weight_power)
         if self.mag_weight_cap is not None:
             weights = torch.clamp(weights, max=self.mag_weight_cap)
         return (weights * huber_elem).mean()

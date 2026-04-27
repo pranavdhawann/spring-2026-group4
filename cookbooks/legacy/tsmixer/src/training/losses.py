@@ -10,9 +10,7 @@ import torch.nn.functional as F
 class MixedReturnLoss(nn.Module):
     """MSE plus quantile pinball penalty to discourage variance collapse."""
 
-    def __init__(
-        self, quantile_lambda: float = 0.3, quantiles: Sequence[float] = (0.1, 0.9)
-    ):
+    def __init__(self, quantile_lambda: float = 0.3, quantiles: Sequence[float] = (0.1, 0.9)):
         super().__init__()
         self.ql = float(quantile_lambda)
         self.quantiles = tuple(float(q) for q in quantiles)
@@ -45,9 +43,7 @@ class ReturnLoss(nn.Module):
             else:
                 # Keep backward compatibility: when given a single q, pair it with lower tail.
                 quantiles = (1.0 - float(q), float(q))
-            self.base: nn.Module = MixedReturnLoss(
-                quantile_lambda=lam, quantiles=quantiles
-            )
+            self.base: nn.Module = MixedReturnLoss(quantile_lambda=lam, quantiles=quantiles)
         elif self.loss_type == "mse":
             self.base = nn.MSELoss()
         elif self.loss_type == "huber":

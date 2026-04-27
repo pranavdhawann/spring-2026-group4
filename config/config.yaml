@@ -18,6 +18,6 @@ TICKER2IDX: 'tickers2id.json' # relative to BASELINE_DATA_PATH
 #STRIDE: 2                   # window step size
 N_STOCKS: 250              # number of top stocks to be chosen from STOCK_SCORE_NEWS
 
-HISTORY_WINDOW_SIZE: 60  # T - how many days of history
+HISTORY_WINDOW_SIZE: 60    # T - how many days of history
 FORECAST_HORIZON: 5       # M - how many days to predict
 STRIDE: 2

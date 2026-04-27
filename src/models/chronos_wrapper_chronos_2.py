@@ -53,23 +53,17 @@ class ChronosForecaster:
 
         logger.info(
             "Loading Chronos model '%s' on device='%s', dtype=%s",
-            model_id,
-            device_map,
-            torch_dtype,
+            model_id, device_map, torch_dtype,
         )
 
         # Chronos2Pipeline uses 'dtype'; older pipelines use 'torch_dtype'.
         try:
             self.pipeline = BaseChronosPipeline.from_pretrained(
-                model_id,
-                device_map=device_map,
-                dtype=resolved_dtype,
+                model_id, device_map=device_map, dtype=resolved_dtype,
             )
         except TypeError:
             self.pipeline = BaseChronosPipeline.from_pretrained(
-                model_id,
-                device_map=device_map,
-                torch_dtype=resolved_dtype,
+                model_id, device_map=device_map, torch_dtype=resolved_dtype,
             )
 
         self.model_id = model_id
@@ -174,9 +168,7 @@ class ChronosForecaster:
             batch = contexts[start : start + batch_size]
             logger.debug(
                 "Inference batch %d-%d / %d",
-                start,
-                min(start + batch_size, len(contexts)),
-                len(contexts),
+                start, min(start + batch_size, len(contexts)), len(contexts),
             )
 
             # Chronos2Pipeline uses 'inputs'; older pipelines use 'context'
@@ -202,10 +194,7 @@ class ChronosForecaster:
 
         logger.info(
             "Quantile forecasts: shape %s (series=%d, quantiles=%d, horizon=%d)",
-            result_q.shape,
-            result_q.shape[0],
-            result_q.shape[1],
-            result_q.shape[2],
+            result_q.shape, result_q.shape[0], result_q.shape[1], result_q.shape[2],
         )
         return result_q, result_m
 
@@ -252,17 +241,19 @@ class ChronosForecaster:
         # Extend to [0, 1] by linear extrapolation
         extended_levels = np.concatenate([[0.0], levels, [1.0]])
 
-        low_slope = (quantile_forecast[:, 1:2, :] - quantile_forecast[:, 0:1, :]) / (
-            levels[1] - levels[0]
-        )
-        high_slope = (quantile_forecast[:, -1:, :] - quantile_forecast[:, -2:-1, :]) / (
-            levels[-1] - levels[-2]
-        )
+        low_slope = (
+            quantile_forecast[:, 1:2, :] - quantile_forecast[:, 0:1, :]
+        ) / (levels[1] - levels[0])
+        high_slope = (
+            quantile_forecast[:, -1:, :] - quantile_forecast[:, -2:-1, :]
+        ) / (levels[-1] - levels[-2])
 
         low_ext = quantile_forecast[:, 0:1, :] - low_slope * levels[0]
         high_ext = quantile_forecast[:, -1:, :] + high_slope * (1.0 - levels[-1])
 
-        extended_values = np.concatenate([low_ext, quantile_forecast, high_ext], axis=1)
+        extended_values = np.concatenate(
+            [low_ext, quantile_forecast, high_ext], axis=1
+        )
 
         uniform_samples = np.linspace(0.01, 0.99, num_samples)
         samples = np.zeros((n_series, num_samples, horizon), dtype=np.float64)

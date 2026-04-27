@@ -16,7 +16,6 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from chronos import ChronosPipeline
-
 from src.preProcessing.data_preprocessing_chronos_t5 import load_ticker
 from src.utils.utils import read_json_file, read_yaml, set_seed
 
@@ -29,18 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Batch Zero-Shot Forecasting with Chronos"
-    )
-    parser.add_argument(
-        "--manifest_path", type=str, required=True, help="Path to JSON manifest"
-    )
-    parser.add_argument(
-        "--data_dir", type=str, required=True, help="Directory containing ticker CSVs"
-    )
-    parser.add_argument(
-        "--target_col", type=str, default="Close", help="Target column to extract"
-    )
+    parser = argparse.ArgumentParser(description="Batch Zero-Shot Forecasting with Chronos")
+    parser.add_argument("--manifest_path", type=str, required=True, help="Path to JSON manifest")
+    parser.add_argument("--data_dir", type=str, required=True, help="Directory containing ticker CSVs")
+    parser.add_argument("--target_col", type=str, default="Close", help="Target column to extract")
     parser.add_argument(
         "--device",
         type=str,
@@ -48,15 +39,8 @@ def main():
         choices=["cuda", "cpu", "auto"],
         help="Execution device. Use 'cuda' to force GPU.",
     )
-    parser.add_argument(
-        "--forecast_horizon", type=int, default=7, help="Number of steps to forecast"
-    )
-    parser.add_argument(
-        "--num_samples",
-        type=int,
-        default=20,
-        help="Number of predictive samples to draw",
-    )
+    parser.add_argument("--forecast_horizon", type=int, default=7, help="Number of steps to forecast")
+    parser.add_argument("--num_samples", type=int, default=20, help="Number of predictive samples to draw")
     parser.add_argument(
         "--output_dir",
         type=str,
@@ -75,9 +59,7 @@ def main():
         default=0,
         help="If > 0, hold out the last N points and forecast them for evaluable backtesting.",
     )
-    parser.add_argument(
-        "--config_path", type=str, default=None, help="Path to config YAML"
-    )
+    parser.add_argument("--config_path", type=str, default=None, help="Path to config YAML")
     args = parser.parse_args()
     target_is_returns = args.target_col.lower() == "returns"
 
@@ -94,18 +76,14 @@ def main():
 
     manifest = read_json_file(args.manifest_path)
     if not manifest:
-        logger.error(
-            f"Failed to read manifest or manifest is empty: {args.manifest_path}"
-        )
+        logger.error(f"Failed to read manifest or manifest is empty: {args.manifest_path}")
         sys.exit(1)
 
     if args.device == "auto":
         device_map = "cuda" if torch.cuda.is_available() else "cpu"
     elif args.device == "cuda":
         if not torch.cuda.is_available():
-            logger.error(
-                "CUDA requested but not available. Check driver/PyTorch CUDA install."
-            )
+            logger.error("CUDA requested but not available. Check driver/PyTorch CUDA install.")
             sys.exit(1)
         device_map = "cuda"
     else:
@@ -169,9 +147,7 @@ def main():
             if backtest_mode:
                 h = int(args.backtest_horizon)
                 if len(values) <= h or len(close_values) <= h:
-                    logger.warning(
-                        f"[{ticker}] Series too short for backtest_horizon={h}. Skipping."
-                    )
+                    logger.warning(f"[{ticker}] Series too short for backtest_horizon={h}. Skipping.")
                     continue
                 prediction_length = h
                 context_values = values[:-h]
@@ -184,9 +160,7 @@ def main():
                 last_known_date = close_dates[-1]
                 last_known_close = float(close_values[-1])
                 start_fcast = pd.to_datetime(last_known_date) + pd.Timedelta(days=1)
-                future_dates = pd.date_range(
-                    start=start_fcast, periods=prediction_length, freq="B"
-                ).values
+                future_dates = pd.date_range(start=start_fcast, periods=prediction_length, freq="B").values
                 if len(future_dates) > prediction_length:
                     future_dates = future_dates[:prediction_length]
                 elif len(future_dates) < prediction_length:
@@ -244,9 +218,7 @@ def main():
             direction = "up" if pred_end_value > last_known_close else "down"
             pct_change = 0.0
             if last_known_close != 0:
-                pct_change = (
-                    (pred_end_value - last_known_close) / last_known_close
-                ) * 100
+                pct_change = ((pred_end_value - last_known_close) / last_known_close) * 100
 
             summary_records.append(
                 {
@@ -274,9 +246,7 @@ def main():
         summary_df = pd.DataFrame(summary_records)
         summary_path = output_dir / "summary.csv"
         summary_df.to_csv(summary_path, index=False)
-        logger.info(
-            f"Saved generated summary for {len(summary_records)} tickers to {summary_path}"
-        )
+        logger.info(f"Saved generated summary for {len(summary_records)} tickers to {summary_path}")
     else:
         logger.warning("No forecasts generated; summary CSV not created.")
 

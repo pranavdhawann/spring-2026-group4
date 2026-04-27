@@ -33,9 +33,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils_gnn import (
-    DEFAULT_CONFIG_PATH,
     assign_news_to_trading_day,
     build_trading_calendar,
+    DEFAULT_CONFIG_PATH,
     load_config,
     log_runtime_context,
     resolve_data_path,
@@ -77,9 +77,7 @@ def load_news_articles(news_dir: str) -> Dict[str, List[dict]]:
                         articles.append(article)
                     except json.JSONDecodeError:
                         if line_num <= 3:
-                            logger.debug(
-                                f"Skipped invalid JSON in {fname} line {line_num}"
-                            )
+                            logger.debug(f"Skipped invalid JSON in {fname} line {line_num}")
 
             if articles:
                 all_news[ticker] = articles
@@ -87,15 +85,11 @@ def load_news_articles(news_dir: str) -> Dict[str, List[dict]]:
             logger.warning(f"Failed to load {fpath}: {e}")
 
     total = sum(len(v) for v in all_news.values())
-    logger.info(
-        f"Loaded {total} articles across {len(all_news)} tickers from {news_dir}"
-    )
+    logger.info(f"Loaded {total} articles across {len(all_news)} tickers from {news_dir}")
     return all_news
 
 
-def encode_articles_batch(
-    texts, tokenizer, model, device, batch_size=32, max_length=512, pooling="mean"
-):
+def encode_articles_batch(texts, tokenizer, model, device, batch_size=32, max_length=512, pooling="mean"):
     """Batch-encode texts using a transformer model.
 
     Args:
@@ -117,19 +111,11 @@ def encode_articles_batch(
 
     for i in range(0, len(texts), batch_size):
         batch_texts = texts[i : i + batch_size]
-        logger.debug(
-            "Encoding article batch %d-%d / %d",
-            i + 1,
-            min(i + batch_size, len(texts)),
-            len(texts),
-        )
+        logger.debug("Encoding article batch %d-%d / %d", i + 1, min(i + batch_size, len(texts)), len(texts))
 
         encoded = tokenizer(
-            batch_texts,
-            padding=True,
-            truncation=True,
-            max_length=max_length,
-            return_tensors="pt",
+            batch_texts, padding=True, truncation=True,
+            max_length=max_length, return_tensors="pt",
         )
         encoded = {k: v.to(device) for k, v in encoded.items()}
 
@@ -138,11 +124,7 @@ def encode_articles_batch(
 
         if pooling == "cls" and hasattr(outputs, "last_hidden_state"):
             embeddings = outputs.last_hidden_state[:, 0, :]
-        elif (
-            pooling == "pooler"
-            and hasattr(outputs, "pooler_output")
-            and outputs.pooler_output is not None
-        ):
+        elif pooling == "pooler" and hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
             embeddings = outputs.pooler_output
         else:
             # Default: attention-mask-weighted mean pooling over tokens.
@@ -150,15 +132,9 @@ def encode_articles_batch(
                 token_embeddings = outputs.last_hidden_state
             else:
                 token_embeddings = outputs[0]
-            attention_mask = encoded.get(
-                "attention_mask", torch.ones_like(encoded["input_ids"])
-            )
-            mask_expanded = (
-                attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-            )
-            embeddings = torch.sum(
-                token_embeddings * mask_expanded, 1
-            ) / mask_expanded.sum(1).clamp(min=1e-9)
+            attention_mask = encoded.get("attention_mask", torch.ones_like(encoded["input_ids"]))
+            mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            embeddings = torch.sum(token_embeddings * mask_expanded, 1) / mask_expanded.sum(1).clamp(min=1e-9)
 
         all_embeddings.append(embeddings.cpu())
 
@@ -189,11 +165,7 @@ def preprocess_news(config: dict):
         kind="directory",
     )
     os.makedirs(cache_dir, exist_ok=True)
-    logger.info(
-        "News preprocessing paths | source=%s | cache=%s",
-        os.path.abspath(news_dir),
-        os.path.abspath(cache_dir),
-    )
+    logger.info("News preprocessing paths | source=%s | cache=%s", os.path.abspath(news_dir), os.path.abspath(cache_dir))
 
     all_news = load_news_articles(news_dir)
     if not all_news:
@@ -205,8 +177,7 @@ def preprocess_news(config: dict):
     logger.info(f"Loading encoder: {encoder_model_name}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    from transformers import AutoModel, AutoTokenizer
-
+    from transformers import AutoTokenizer, AutoModel
     tokenizer = AutoTokenizer.from_pretrained(encoder_model_name)
     model = AutoModel.from_pretrained(encoder_model_name).to(device)
     model.eval()
@@ -220,9 +191,7 @@ def preprocess_news(config: dict):
         cache_file = os.path.join(cache_dir, f"{ticker}_news_embeddings.pt")
         if os.path.exists(cache_file):
             skipped_cached += 1
-            logger.debug(
-                "Skipping %s because cache already exists at %s", ticker, cache_file
-            )
+            logger.debug("Skipping %s because cache already exists at %s", ticker, cache_file)
             continue
 
         # Build text from Article_title + Article (FinMultiTime schema)
@@ -248,20 +217,12 @@ def preprocess_news(config: dict):
             dates.append(article_date)
 
         if not texts:
-            logger.debug(
-                "Skipping %s because no valid article text remained after cleaning",
-                ticker,
-            )
+            logger.debug("Skipping %s because no valid article text remained after cleaning", ticker)
             continue
 
         embeddings = encode_articles_batch(
-            texts,
-            tokenizer,
-            model,
-            device,
-            batch_size=32,
-            max_length=512,
-            pooling=pooling,
+            texts, tokenizer, model, device,
+            batch_size=32, max_length=512, pooling=pooling,
         )
 
         # Group by trading day
@@ -269,10 +230,8 @@ def preprocess_news(config: dict):
         for emb, article_date in zip(embeddings, dates):
             try:
                 trading_day = assign_news_to_trading_day(
-                    article_date,
-                    trading_cal,
-                    cutoff_hour=cutoff_hour,
-                    cutoff_minute=cutoff_minute,
+                    article_date, trading_cal,
+                    cutoff_hour=cutoff_hour, cutoff_minute=cutoff_minute,
                 )
                 daily_embeddings[str(trading_day.date())].append(emb)
             except (ValueError, IndexError):
@@ -301,21 +260,15 @@ def preprocess_news(config: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Preprocess FinMultiTime news with FinBERT"
-    )
+    parser = argparse.ArgumentParser(description="Preprocess FinMultiTime news with FinBERT")
     parser.add_argument("--config", type=str, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
     config = load_config(args.config)
-    log_path = setup_logging(
-        config, command_name="preprocess_news", config_path=args.config, args=args
-    )
+    log_path = setup_logging(config, command_name="preprocess_news", config_path=args.config, args=args)
     logger.info("Loaded config from %s", os.path.abspath(args.config))
-    log_runtime_context(
-        "preprocess_news", config, extra={"preprocess_log_path": log_path}
-    )
+    log_runtime_context("preprocess_news", config, extra={"preprocess_log_path": log_path})
     if args.force:
         _, cache_dir = resolve_data_path(
             config["data"]["data_dir"],
@@ -325,12 +278,8 @@ def main():
         )
         if os.path.exists(cache_dir):
             import shutil
-
             shutil.rmtree(cache_dir)
-            logger.info(
-                "Removed existing news cache at %s because --force was set",
-                os.path.abspath(cache_dir),
-            )
+            logger.info("Removed existing news cache at %s because --force was set", os.path.abspath(cache_dir))
     preprocess_news(config)
 
 

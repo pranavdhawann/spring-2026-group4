@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+
 FEATURE_COLS = [
     "log_ret",
     "log_high_low",
@@ -51,9 +52,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [c.strip().lower() for c in df.columns]
     for col in ["open", "high", "low", "close", "volume"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna(subset=["open", "high", "low", "close", "volume"]).reset_index(
-        drop=True
-    )
+    df = df.dropna(subset=["open", "high", "low", "close", "volume"]).reset_index(drop=True)
 
     close_prev = df["close"].shift(1)
 

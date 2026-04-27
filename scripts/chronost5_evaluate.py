@@ -42,16 +42,12 @@ def parse_quantiles(raw: str) -> list[int]:
     """Parse a comma-separated percentile list like ``10,50,90``."""
     parts = [part.strip() for part in str(raw).split(",")]
     if not parts or any(not part for part in parts):
-        raise argparse.ArgumentTypeError(
-            "Quantiles must be a comma-separated list like 10,50,90."
-        )
+        raise argparse.ArgumentTypeError("Quantiles must be a comma-separated list like 10,50,90.")
 
     try:
         quantiles = [int(part) for part in parts]
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(
-            "Quantiles must be whole-number percentiles like 10,50,90."
-        ) from exc
+        raise argparse.ArgumentTypeError("Quantiles must be whole-number percentiles like 10,50,90.") from exc
 
     if any(q <= 0 or q >= 100 for q in quantiles):
         raise argparse.ArgumentTypeError("Quantiles must be between 1 and 99.")
@@ -63,34 +59,24 @@ def parse_plot_bands(raw: str) -> list[tuple[int, int]]:
     """Parse comma-separated percentile bands like ``10-90,30-40``."""
     parts = [part.strip() for part in str(raw).split(",")]
     if not parts or any(not part for part in parts):
-        raise argparse.ArgumentTypeError(
-            "Plot bands must be a comma-separated list like 10-90,30-40."
-        )
+        raise argparse.ArgumentTypeError("Plot bands must be a comma-separated list like 10-90,30-40.")
 
     bands = []
     for part in parts:
         pieces = [piece.strip() for piece in part.split("-")]
         if len(pieces) != 2 or any(not piece for piece in pieces):
-            raise argparse.ArgumentTypeError(
-                "Each plot band must look like lower-upper, for example 10-90."
-            )
+            raise argparse.ArgumentTypeError("Each plot band must look like lower-upper, for example 10-90.")
 
         try:
             lower = int(pieces[0])
             upper = int(pieces[1])
         except ValueError as exc:
-            raise argparse.ArgumentTypeError(
-                "Plot band endpoints must be whole-number percentiles."
-            ) from exc
+            raise argparse.ArgumentTypeError("Plot band endpoints must be whole-number percentiles.") from exc
 
         if lower <= 0 or upper >= 100:
-            raise argparse.ArgumentTypeError(
-                "Plot band percentiles must be between 1 and 99."
-            )
+            raise argparse.ArgumentTypeError("Plot band percentiles must be between 1 and 99.")
         if lower >= upper:
-            raise argparse.ArgumentTypeError(
-                "Each plot band must have a lower percentile smaller than the upper percentile."
-            )
+            raise argparse.ArgumentTypeError("Each plot band must have a lower percentile smaller than the upper percentile.")
 
         bands.append((lower, upper))
 
@@ -102,14 +88,9 @@ def quantile_label(quantile: int) -> str:
     return f"Q{quantile}"
 
 
-def compute_quantile_arrays(
-    samples: np.ndarray, quantiles: list[int]
-) -> dict[int, np.ndarray]:
+def compute_quantile_arrays(samples: np.ndarray, quantiles: list[int]) -> dict[int, np.ndarray]:
     """Compute percentile paths from sampled forecast trajectories."""
-    return {
-        quantile: np.quantile(samples, quantile / 100.0, axis=0)
-        for quantile in quantiles
-    }
+    return {quantile: np.quantile(samples, quantile / 100.0, axis=0) for quantile in quantiles}
 
 
 def merge_plot_band_quantiles(
@@ -169,19 +150,13 @@ def clean_single_csv(fpath: Path) -> pd.DataFrame | None:
         return None
 
     df = df[KEEP_COLS].copy()
-    df["Date"] = (
-        pd.to_datetime(df["Date"], utc=True).dt.tz_localize(None).dt.normalize()
-    )
+    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.tz_localize(None).dt.normalize()
 
     for column in ["Open", "High", "Low", "Close", "Volume"]:
         df[column] = pd.to_numeric(df[column], errors="coerce")
 
     df["Volume"] = df["Volume"].fillna(0)
-    df = (
-        df.sort_values("Date")
-        .drop_duplicates(subset="Date", keep="last")
-        .reset_index(drop=True)
-    )
+    df = df.sort_values("Date").drop_duplicates(subset="Date", keep="last").reset_index(drop=True)
 
     nan_before = int(df["Close"].isna().sum())
     df["Close"] = df["Close"].ffill(limit=3)
@@ -190,9 +165,7 @@ def clean_single_csv(fpath: Path) -> pd.DataFrame | None:
         df = df.dropna(subset=["Close"])
     if nan_before > 0:
         filled = nan_before - nan_after
-        print(
-            f"  [{fpath.name}] Forward-filled {filled} NaN Close values, dropped {nan_after}"
-        )
+        print(f"  [{fpath.name}] Forward-filled {filled} NaN Close values, dropped {nan_after}")
 
     df = df[df["Close"] > 0].reset_index(drop=True)
     if len(df) < 2:
@@ -200,9 +173,7 @@ def clean_single_csv(fpath: Path) -> pd.DataFrame | None:
         return None
 
     close_arr = df["Close"].to_numpy(dtype=np.float64)
-    df["Log_Return"] = np.concatenate(
-        [[np.nan], np.log(close_arr[1:] / close_arr[:-1])]
-    )
+    df["Log_Return"] = np.concatenate([[np.nan], np.log(close_arr[1:] / close_arr[:-1])])
     df = df.iloc[1:].reset_index(drop=True)
 
     bad_mask = ~np.isfinite(df["Log_Return"].to_numpy(dtype=np.float64))
@@ -273,8 +244,7 @@ def build_forecast_frame(result: dict) -> pd.DataFrame:
         frame_data,
         quantiles=result["quantiles"],
         quantile_values={
-            quantile: np.cumsum(result["quantile_lr"][quantile])
-            for quantile in result["quantiles"]
+            quantile: np.cumsum(result["quantile_lr"][quantile]) for quantile in result["quantiles"]
         },
         suffix="Cumulative_LogReturn",
     )
@@ -308,9 +278,7 @@ def build_summary_row(ticker: str, result: dict) -> dict:
         "last_known_close": round(result["last_close"], 4),
         "forecast_log_return_last_day": round(float(result["point_lr"][-1]), 8),
         "actual_log_return_last_day": round(float(result["actual_lr"][-1]), 8),
-        "forecast_log_return_error_last_day": round(
-            float(result["point_lr"][-1] - result["actual_lr"][-1]), 8
-        ),
+        "forecast_log_return_error_last_day": round(float(result["point_lr"][-1] - result["actual_lr"][-1]), 8),
         "forecast_cumulative_log_return": round(forecast_cum, 8),
         "actual_cumulative_log_return": round(actual_cum, 8),
         f"forecast_close_day{horizon}": forecast_close_last,
@@ -381,19 +349,12 @@ def save_forecast_plot(
     for index, (lower_quantile, upper_quantile) in enumerate(
         sorted(bands_to_plot, key=lambda band: band[1] - band[0], reverse=True)
     ):
-        if (
-            lower_quantile not in result["quantile_close"]
-            or upper_quantile not in result["quantile_close"]
-        ):
+        if lower_quantile not in result["quantile_close"] or upper_quantile not in result["quantile_close"]:
             raise ValueError(
                 f"Plot band {lower_quantile}-{upper_quantile} requires matching quantiles in the forecast output."
             )
-        lower = np.concatenate(
-            [[pivot_price], result["quantile_close"][lower_quantile]]
-        )
-        upper = np.concatenate(
-            [[pivot_price], result["quantile_close"][upper_quantile]]
-        )
+        lower = np.concatenate([[pivot_price], result["quantile_close"][lower_quantile]])
+        upper = np.concatenate([[pivot_price], result["quantile_close"][upper_quantile]])
         ax.fill_between(
             all_pred_dates,
             lower,
@@ -412,9 +373,7 @@ def save_forecast_plot(
         va="bottom",
         transform=ax.get_xaxis_transform(),
     )
-    ax.set_title(
-        f"{ticker.upper()} - {len(hist_close)}-Day History + {len(act_close)}-Day Forecast"
-    )
+    ax.set_title(f"{ticker.upper()} - {len(hist_close)}-Day History + {len(act_close)}-Day Forecast")
     ax.set_ylabel("Price ($)")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
     ax.legend(loc="best")
@@ -441,17 +400,14 @@ def forecast_from_samples(
     quantile_lr = compute_quantile_arrays(samples, quantiles)
 
     result = {
-        "dates": pd.to_datetime(dates).tz_localize(None)
-        if not isinstance(dates, pd.Series)
-        else dates.dt.tz_localize(None),
+        "dates": pd.to_datetime(dates).tz_localize(None) if not isinstance(dates, pd.Series) else dates.dt.tz_localize(None),
         "quantiles": quantiles,
         "point_lr": point_lr,
         "quantile_lr": quantile_lr,
         "actual_lr": np.asarray(actual_lr, dtype=np.float64),
         "point_close": lr_to_close(point_lr, base_close),
         "quantile_close": {
-            quantile: lr_to_close(quantile_lr[quantile], base_close)
-            for quantile in quantiles
+            quantile: lr_to_close(quantile_lr[quantile], base_close) for quantile in quantiles
         },
         "actual_close": np.asarray(actual_close, dtype=np.float64),
         "last_close": base_close,
@@ -527,9 +483,7 @@ def forecast_from_context(
         context[bad] = 0.0
 
     context_tensor = torch.tensor(context, dtype=torch.float32)
-    samples = pipeline.predict(
-        context_tensor, prediction_length=horizon, num_samples=num_samples
-    )
+    samples = pipeline.predict(context_tensor, prediction_length=horizon, num_samples=num_samples)
     samples = samples.squeeze(0).numpy()
 
     return {
@@ -546,14 +500,12 @@ def compute_metrics(predicted: np.ndarray, actual: np.ndarray) -> dict:
     pct_err = abs_err / np.where(actual == 0, 1e-9, np.abs(actual))
     smape = 2 * abs_err / (np.abs(predicted) + np.abs(actual) + 1e-9)
 
-    pred_dir = (
-        np.sign(predicted - predicted[0]) if len(predicted) > 1 else np.array([0])
-    )
+    pred_dir = np.sign(predicted - predicted[0]) if len(predicted) > 1 else np.array([0])
     act_dir = np.sign(actual - actual[0]) if len(actual) > 1 else np.array([0])
     dir_acc = np.mean(pred_dir == act_dir) if len(pred_dir) > 1 else float("nan")
 
     return {
-        "rmse": float(np.sqrt(np.mean(errors**2))),
+        "rmse": float(np.sqrt(np.mean(errors ** 2))),
         "mae": float(np.mean(abs_err)),
         "mape": float(np.mean(pct_err) * 100),
         "smape": float(np.mean(smape) * 100),
@@ -571,7 +523,7 @@ def run_preprocess(args) -> int:
 
     csv_files = sorted(src_dir.glob("*.csv"))
     if args.max_tickers:
-        csv_files = csv_files[: args.max_tickers]
+        csv_files = csv_files[:args.max_tickers]
     print(
         f"Found {len(csv_files)} CSV files in {src_dir}/"
         f"{f' (limited to {args.max_tickers})' if args.max_tickers else ''}\n"
@@ -617,16 +569,11 @@ def run_forecast(args) -> int:
     print(f"Context length: {args.context_length}")
     print(f"Horizon:        {args.horizon}")
     print(f"Num samples:    {args.num_samples}")
-    print(
-        f"Quantiles:      {', '.join(quantile_label(quantile) for quantile in effective_quantiles)}"
-    )
+    print(f"Quantiles:      {', '.join(quantile_label(quantile) for quantile in effective_quantiles)}")
     if plot_bands:
         print(
             "Plot bands:     "
-            + ", ".join(
-                f"{quantile_label(lower)}-{quantile_label(upper)}"
-                for lower, upper in plot_bands
-            )
+            + ", ".join(f"{quantile_label(lower)}-{quantile_label(upper)}" for lower, upper in plot_bands)
         )
     print()
 
@@ -634,7 +581,7 @@ def run_forecast(args) -> int:
 
     csv_files = sorted(data_dir.glob("*.csv"))
     if args.max_tickers:
-        csv_files = csv_files[: args.max_tickers]
+        csv_files = csv_files[:args.max_tickers]
     print(
         f"Found {len(csv_files)} cleaned CSVs"
         f"{f' (limited to {args.max_tickers})' if args.max_tickers else ''}\n"
@@ -702,16 +649,14 @@ def run_evaluation(args) -> int:
     print(f"Horizon:   {args.horizon}")
     print(f"Context:   {args.context_length}")
     print(f"Samples:   {args.num_samples}")
-    print(
-        f"Quantiles: {', '.join(quantile_label(quantile) for quantile in args.quantiles)}"
-    )
+    print(f"Quantiles: {', '.join(quantile_label(quantile) for quantile in args.quantiles)}")
     print()
 
     pipeline = load_chronos_pipeline(args.model, args.device)
 
     csv_files = sorted(data_dir.glob("*.csv"))
     if args.max_tickers:
-        csv_files = csv_files[: args.max_tickers]
+        csv_files = csv_files[:args.max_tickers]
     print(
         f"Found {len(csv_files)} tickers"
         f"{f' (limited to {args.max_tickers})' if args.max_tickers else ''}\n"
@@ -727,11 +672,9 @@ def run_evaluation(args) -> int:
             print(f"  [SKIP] {ticker}: not enough data for context + holdout")
             continue
 
-        train_df = df.iloc[: -args.horizon]
-        test_df = df.iloc[-args.horizon :]
-        context = train_df["Log_Return"].to_numpy(dtype=np.float64)[
-            -args.context_length :
-        ]
+        train_df = df.iloc[:-args.horizon]
+        test_df = df.iloc[-args.horizon:]
+        context = train_df["Log_Return"].to_numpy(dtype=np.float64)[-args.context_length:]
         base_close = float(train_df["Close"].iloc[-1])
         actual_close = test_df["Close"].to_numpy(dtype=np.float64)
         actual_dates = test_df["Date"].values
@@ -765,14 +708,8 @@ def run_evaluation(args) -> int:
         pd.DataFrame(detail_data).to_csv(detail_dir / f"{ticker}.csv", index=False)
 
         pct_err = metrics["mape"]
-        dir_str = (
-            f"{metrics['direction_accuracy']:.0%}"
-            if not np.isnan(metrics["direction_accuracy"])
-            else "n/a"
-        )
-        print(
-            f"  {ticker:8s}  MAPE={pct_err:6.2f}%  RMSE={metrics['rmse']:8.4f}  DirAcc={dir_str}"
-        )
+        dir_str = f"{metrics['direction_accuracy']:.0%}" if not np.isnan(metrics["direction_accuracy"]) else "n/a"
+        print(f"  {ticker:8s}  MAPE={pct_err:6.2f}%  RMSE={metrics['rmse']:8.4f}  DirAcc={dir_str}")
 
     if not all_metrics:
         print("\nNo tickers evaluated.")
@@ -790,9 +727,7 @@ def run_evaluation(args) -> int:
         "final_predicted",
         "final_actual",
     ]
-    metrics_df = metrics_df[
-        [column for column in cols_order if column in metrics_df.columns]
-    ]
+    metrics_df = metrics_df[[column for column in cols_order if column in metrics_df.columns]]
     metrics_df.to_csv(out_dir / "per_ticker_metrics.csv", index=False)
 
     numeric_cols = ["rmse", "mae", "mape", "smape", "direction_accuracy"]
@@ -837,21 +772,13 @@ def run_comparison(files: list[str]) -> int:
         better = labels[1] if improvement > 0 else labels[0]
         print(f"  Mean improvement:     {abs(improvement):.2f}pp ({better} is better)")
 
-        dir_cols = [
-            column
-            for column in merged.columns
-            if column.startswith("direction_accuracy_")
-        ]
+        dir_cols = [column for column in merged.columns if column.startswith("direction_accuracy_")]
         if len(dir_cols) == 2:
             print(f"  Dir accuracy ({labels[0]}): {merged[dir_cols[0]].mean():.1%}")
             print(f"  Dir accuracy ({labels[1]}): {merged[dir_cols[1]].mean():.1%}")
 
-        print(
-            f"\n  Tickers where {labels[1]} wins: {(merged['mape_improvement'] > 0).sum()}/{len(merged)}"
-        )
-        print(
-            f"  Tickers where {labels[0]} wins: {(merged['mape_improvement'] < 0).sum()}/{len(merged)}"
-        )
+        print(f"\n  Tickers where {labels[1]} wins: {(merged['mape_improvement'] > 0).sum()}/{len(merged)}")
+        print(f"  Tickers where {labels[0]} wins: {(merged['mape_improvement'] < 0).sum()}/{len(merged)}")
 
     out_path = Path("eval") / "comparison.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -907,12 +834,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="amazon/chronos-t5-large",
         help="HF model ID or compatible checkpoint path (default: amazon/chronos-t5-large)",
     )
-    forecast_parser.add_argument(
-        "--device",
-        default="cuda",
-        choices=["cuda", "cpu"],
-        help="Device (default: cuda)",
-    )
+    forecast_parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"], help="Device (default: cuda)")
     forecast_parser.add_argument(
         "--context-length",
         type=int,

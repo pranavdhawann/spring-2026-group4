@@ -29,9 +29,7 @@ class RevIN(nn.Module):
         # x: (B, L, C) for norm, (B, H, C) for denorm
         if mode == "norm":
             self._mean = x.mean(dim=1, keepdim=True).detach()
-            self._std = torch.sqrt(
-                x.var(dim=1, keepdim=True, unbiased=False) + self.eps
-            ).detach()
+            self._std = torch.sqrt(x.var(dim=1, keepdim=True, unbiased=False) + self.eps).detach()
             x = (x - self._mean) / self._std
             if self.affine:
                 x = x * self.gamma + self.beta
@@ -47,14 +45,10 @@ class RevIN(nn.Module):
 class _EncoderBlock(nn.Module):
     def __init__(self, d_model: int, n_heads: int, ffn_dim: int, dropout: float):
         super().__init__()
-        self.attn = nn.MultiheadAttention(
-            d_model, n_heads, dropout=dropout, batch_first=True
-        )
+        self.attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout, batch_first=True)
         self.norm1 = nn.LayerNorm(d_model)
         self.ff = nn.Sequential(
-            nn.Linear(d_model, ffn_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
+            nn.Linear(d_model, ffn_dim), nn.GELU(), nn.Dropout(dropout),
             nn.Linear(ffn_dim, d_model),
         )
         self.norm2 = nn.LayerNorm(d_model)
@@ -108,43 +102,38 @@ class PatchTST(nn.Module):
         else:
             pe = torch.zeros(self.num_patches, d_model)
             pos = torch.arange(self.num_patches).unsqueeze(1).float()
-            div = torch.exp(
-                torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)
-            )
+            div = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
             pe[:, 0::2] = torch.sin(pos * div)
             pe[:, 1::2] = torch.cos(pos * div)
             self.register_buffer("pos_embed", pe.unsqueeze(0))
 
         self.input_drop = nn.Dropout(dropout)
-        self.encoder = nn.ModuleList(
-            [
-                _EncoderBlock(d_model, n_heads, ffn_dim, dropout)
-                for _ in range(encoder_layers)
-            ]
-        )
+        self.encoder = nn.ModuleList([
+            _EncoderBlock(d_model, n_heads, ffn_dim, dropout) for _ in range(encoder_layers)
+        ])
 
         self.fc_drop = nn.Dropout(fc_dropout)
         self.head = nn.Linear(self.num_patches * d_model, horizon)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, L, C)
-        x = self.revin(x, "norm")  # (B, L, C)
-        x = x.permute(0, 2, 1)  # (B, C, L)
+        x = self.revin(x, "norm")                                    # (B, L, C)
+        x = x.permute(0, 2, 1)                                       # (B, C, L)
         if self.pad_left > 0:
             x = nn.functional.pad(x, (self.pad_left, 0), mode="replicate")
         # unfold into patches: (B, C, num_patches, patch_len)
         patches = x.unfold(dimension=-1, size=self.patch_len, step=self.stride)
         B, C, P, PL = patches.shape
-        tokens = self.patch_proj(patches.reshape(B * C, P, PL))  # (B*C, P, d)
+        tokens = self.patch_proj(patches.reshape(B * C, P, PL))      # (B*C, P, d)
         tokens = tokens + self.pos_embed
         tokens = self.input_drop(tokens)
         for blk in self.encoder:
             tokens = blk(tokens)
-        flat = tokens.reshape(B, C, P * tokens.size(-1))  # (B, C, P*d)
-        out = self.head(self.fc_drop(flat))  # (B, C, H)
-        out = out.permute(0, 2, 1)  # (B, H, C)
+        flat = tokens.reshape(B, C, P * tokens.size(-1))             # (B, C, P*d)
+        out = self.head(self.fc_drop(flat))                          # (B, C, H)
+        out = out.permute(0, 2, 1)                                   # (B, H, C)
 
         # Denormalize in feature space, then pick target channel.
         # RevIN stored mean/std over L; apply same per-channel affine inversion.
-        out = self.revin(out, "denorm")  # (B, H, C)
-        return out[..., self.target_index]  # (B, H)
+        out = self.revin(out, "denorm")                              # (B, H, C)
+        return out[..., self.target_index]                           # (B, H)

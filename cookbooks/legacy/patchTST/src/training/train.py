@@ -32,20 +32,17 @@ class TrainState:
 
 def _loader(datasets: List[Dataset], batch_size: int, shuffle: bool) -> DataLoader:
     ds = ConcatDataset(datasets) if len(datasets) > 1 else datasets[0]
-    return DataLoader(
-        ds, batch_size=batch_size, shuffle=shuffle, drop_last=False, num_workers=0
-    )
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle,
+                      drop_last=False, num_workers=0)
 
 
 @torch.no_grad()
-def _evaluate_loss(
-    model: nn.Module, loader: DataLoader, loss_fn: nn.Module, device: torch.device
-) -> float:
+def _evaluate_loss(model: nn.Module, loader: DataLoader, loss_fn: nn.Module,
+                   device: torch.device) -> float:
     model.eval()
     total, n = 0.0, 0
     for x, y in loader:
-        x = x.to(device)
-        y = y.to(device)
+        x = x.to(device); y = y.to(device)
         pred = model(x)
         total += loss_fn(pred, y).item() * y.size(0)
         n += y.size(0)
@@ -90,8 +87,7 @@ def train_model(
             x, y = next(data_iter)
 
         model.train()
-        x = x.to(device)
-        y = y.to(device)
+        x = x.to(device); y = y.to(device)
         pred = model(x)
         loss = loss_fn(pred, y)
         optim.zero_grad()
@@ -103,38 +99,22 @@ def train_model(
 
         if state.step % val_every == 0 or state.step == max_steps:
             val_loss = _evaluate_loss(model, val_loader, loss_fn, device)
-            history.append(
-                {
-                    "step": state.step,
-                    "train_loss": float(loss.item()),
-                    "val_loss": val_loss,
-                    "lr": sched.get_last_lr()[0],
-                }
-            )
-            print(
-                f"[step {state.step:5d}] train={loss.item():.6f}  val={val_loss:.6f}  "
-                f"lr={sched.get_last_lr()[0]:.2e}"
-            )
+            history.append({"step": state.step, "train_loss": float(loss.item()),
+                            "val_loss": val_loss, "lr": sched.get_last_lr()[0]})
+            print(f"[step {state.step:5d}] train={loss.item():.6f}  val={val_loss:.6f}  "
+                  f"lr={sched.get_last_lr()[0]:.2e}")
             # flush history so plot.py can read it mid-training
             (ckpt_path.parent / "history.json").write_text(json.dumps(history))
 
             if val_loss < state.best_val - 1e-8:
                 state.best_val = val_loss
                 state.patience_left = patience
-                torch.save(
-                    {
-                        "model": model.state_dict(),
-                        "step": state.step,
-                        "val_loss": val_loss,
-                    },
-                    ckpt_path,
-                )
+                torch.save({"model": model.state_dict(), "step": state.step,
+                            "val_loss": val_loss}, ckpt_path)
             else:
                 state.patience_left -= 1
                 if state.patience_left <= 0:
-                    print(
-                        f"Early stopping at step {state.step} (best val={state.best_val:.6f})"
-                    )
+                    print(f"Early stopping at step {state.step} (best val={state.best_val:.6f})")
                     break
 
     return {"history": history, "best_val": state.best_val, "steps": state.step}

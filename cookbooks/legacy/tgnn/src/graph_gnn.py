@@ -10,15 +10,9 @@ Edge types:
     - Self-loops: always present, never dropped
 """
 
-import logging
 import os
-from typing import (  # Tuple used in CorrelationEdgeBuilder type hints
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-)
+import logging
+from typing import Dict, List, Optional, Set, Tuple  # Tuple used in CorrelationEdgeBuilder type hints
 
 import numpy as np
 import pandas as pd
@@ -33,7 +27,6 @@ INVALID_SECTORS = {"Client Error", "N/A", "", "nan", "None"}
 # ===========================================================================
 # Sector Edge Builder
 # ===========================================================================
-
 
 class SectorEdgeBuilder:
     """Build sector edges from sp500stock_data_description.csv sectors."""
@@ -61,8 +54,8 @@ class SectorEdgeBuilder:
 
         # Filter to active tickers with valid sectors
         sectors = self.sectors_df[
-            (self.sectors_df["ticker"].isin(active_set))
-            & (~self.sectors_df["sector"].isin(INVALID_SECTORS))
+            (self.sectors_df["ticker"].isin(active_set)) &
+            (~self.sectors_df["sector"].isin(INVALID_SECTORS))
         ]
 
         sector_groups = sectors.groupby("sector")["ticker"].apply(list).to_dict()
@@ -96,7 +89,6 @@ class SectorEdgeBuilder:
 # ===========================================================================
 # Correlation Edge Builder
 # ===========================================================================
-
 
 class CorrelationEdgeBuilder:
     """Top-K correlation edges with proper per-date caching.
@@ -190,7 +182,7 @@ class CorrelationEdgeBuilder:
             avail = available_lengths[i]
             if avail >= min_required:
                 r = returns_dict[ticker][-actual_window:]
-                returns_matrix[i, : len(r)] = r
+                returns_matrix[i, :len(r)] = r
             else:
                 valid_mask[i] = False
 
@@ -215,9 +207,7 @@ class CorrelationEdgeBuilder:
             return f"{ts_str}@{suffix}"
         return date.date().isoformat() if hasattr(date, "date") else str(date)
 
-    def build(
-        self, date, returns_dict, active_tickers, ticker_to_idx, force_recompute=False
-    ):
+    def build(self, date, returns_dict, active_tickers, ticker_to_idx, force_recompute=False):
         # --- LRU lookup (keyed on date + ticker set) ---
         ticker_key = tuple(sorted(active_tickers))
         cache_key = (date, ticker_key)
@@ -231,10 +221,8 @@ class CorrelationEdgeBuilder:
 
         for i in range(N):
             corr_row = corr_matrix[i].copy()
-            corr_row[
-                i
-            ] = 0.0  # FIX: was -np.inf, which abs() turns to +inf and always lands in top-K
-            top_k_indices = np.argsort(np.abs(corr_row))[-self.top_k :]
+            corr_row[i] = 0.0  # FIX: was -np.inf, which abs() turns to +inf and always lands in top-K
+            top_k_indices = np.argsort(np.abs(corr_row))[-self.top_k:]
             for j in top_k_indices:
                 if i != j and np.abs(corr_row[j]) > 1e-6:
                     src_list.append(i)
@@ -275,7 +263,6 @@ class CorrelationEdgeBuilder:
 # Graph Snapshot Builder
 # ===========================================================================
 
-
 class GraphBuilder:
     """Builds complete graph snapshots combining all edge types."""
 
@@ -289,21 +276,11 @@ class GraphBuilder:
         self.edge_dropout = graph_cfg.get("edge_dropout", 0.1)
         self.protect_self_loops = graph_cfg.get("protect_self_loops", True)
 
-    def build_snapshot(
-        self,
-        date,
-        active_tickers,
-        ticker_to_idx,
-        node_features,
-        returns_dict,
-        training=False,
-    ):
+    def build_snapshot(self, date, active_tickers, ticker_to_idx, node_features, returns_dict, training=False):
         N = len(active_tickers)
 
         sector_ei, sector_ea = self.sector_builder.build(active_tickers, ticker_to_idx)
-        corr_ei, corr_ea = self.corr_builder.build(
-            date, returns_dict, active_tickers, ticker_to_idx
-        )
+        corr_ei, corr_ea = self.corr_builder.build(date, returns_dict, active_tickers, ticker_to_idx)
 
         self_loops = torch.arange(N, dtype=torch.long)
         self_loop_ei = torch.stack([self_loops, self_loops], dim=0)
@@ -316,9 +293,7 @@ class GraphBuilder:
             edge_index, edge_attr = self._apply_edge_dropout(edge_index, edge_attr, N)
 
         data = Data(x=node_features, edge_index=edge_index, edge_attr=edge_attr)
-        data.ticker_ids = torch.tensor(
-            [ticker_to_idx[t] for t in active_tickers], dtype=torch.long
-        )
+        data.ticker_ids = torch.tensor([ticker_to_idx[t] for t in active_tickers], dtype=torch.long)
         data.num_nodes = N
         return data
 
@@ -333,12 +308,11 @@ class GraphBuilder:
         kept_edge_index = edge_index[:, keep_mask]
         for node_id in range(num_nodes):
             node_non_self = (
-                (kept_edge_index[0] == node_id) | (kept_edge_index[1] == node_id)
-            ) & (kept_edge_index[0] != kept_edge_index[1])
+                ((kept_edge_index[0] == node_id) | (kept_edge_index[1] == node_id))
+                & (kept_edge_index[0] != kept_edge_index[1])
+            )
             if not node_non_self.any():
-                node_edges = (
-                    (edge_index[0] == node_id) | (edge_index[1] == node_id)
-                ) & non_self_mask
+                node_edges = ((edge_index[0] == node_id) | (edge_index[1] == node_id)) & non_self_mask
                 keep_mask[node_edges] = True
 
         return edge_index[:, keep_mask], edge_attr[keep_mask]

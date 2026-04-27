@@ -23,9 +23,7 @@ def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return 100.0 - (100.0 / (1.0 + rs))
 
 
-def _atr(
-    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
-) -> pd.Series:
+def _atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     prev_close = close.shift(1)
     tr = pd.concat(
         [(high - low).abs(), (high - prev_close).abs(), (low - prev_close).abs()],

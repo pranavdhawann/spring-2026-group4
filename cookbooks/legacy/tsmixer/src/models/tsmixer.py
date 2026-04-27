@@ -1,6 +1,5 @@
 """TSMixer with RevIN for multi-step log-return forecasting."""
 from __future__ import annotations
-
 import torch
 import torch.nn as nn
 
@@ -28,9 +27,7 @@ class RevIN(nn.Module):
             x = x * self.gamma + self.beta
         return x, mean, std
 
-    def denormalize(
-        self, y: torch.Tensor, mean: torch.Tensor, std: torch.Tensor, feat_idx: int
-    ):
+    def denormalize(self, y: torch.Tensor, mean: torch.Tensor, std: torch.Tensor, feat_idx: int):
         # y: [B, H] predictions for a single feature (target index)
         if self.affine:
             y = (y - self.beta[feat_idx]) / self.gamma[feat_idx]
@@ -100,27 +97,18 @@ class TSMixer(nn.Module):
         self.horizon = horizon
         self.num_tickers = num_tickers
         self.ticker_embed_dim = ticker_embed_dim if num_tickers > 0 else 0
-        self.time_weights = nn.Parameter(
-            torch.linspace(0.5, 1.0, lookback, dtype=torch.float32)
-        )
+        self.time_weights = nn.Parameter(torch.linspace(0.5, 1.0, lookback, dtype=torch.float32))
         self.revin = RevIN(n_features)
         mixer_features = n_features + self.ticker_embed_dim
         self.ticker_embed = (
-            nn.Embedding(num_tickers, self.ticker_embed_dim)
-            if self.ticker_embed_dim > 0
-            else None
+            nn.Embedding(num_tickers, self.ticker_embed_dim) if self.ticker_embed_dim > 0 else None
         )
         self.blocks = nn.ModuleList(
-            [
-                MixerBlock(lookback, mixer_features, ff_dim, dropout)
-                for _ in range(n_blocks)
-            ]
+            [MixerBlock(lookback, mixer_features, ff_dim, dropout) for _ in range(n_blocks)]
         )
         self.head = nn.Linear(lookback, horizon)
 
-    def forward(
-        self, x: torch.Tensor, ticker_id: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, ticker_id: torch.Tensor | None = None) -> torch.Tensor:
         # x: [B, T, C]
         x = x * self.time_weights.view(1, -1, 1)
         x_norm, mean, std = self.revin.normalize(x)
@@ -128,11 +116,7 @@ class TSMixer(nn.Module):
         if self.ticker_embed is not None:
             if ticker_id is None:
                 ticker_id = torch.zeros(x.shape[0], device=x.device, dtype=torch.long)
-            embed = (
-                self.ticker_embed(ticker_id.long())
-                .unsqueeze(1)
-                .expand(-1, x.shape[1], -1)
-            )
+            embed = self.ticker_embed(ticker_id.long()).unsqueeze(1).expand(-1, x.shape[1], -1)
             h = torch.cat([h, embed], dim=-1)
         for blk in self.blocks:
             h = blk(h)

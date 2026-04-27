@@ -24,16 +24,14 @@ PREDICT = ROOT / "predict"
 PLOTS = PREDICT / "plots"
 PLOTS.mkdir(parents=True, exist_ok=True)
 
-plt.rcParams.update(
-    {
-        "figure.dpi": 130,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.grid": True,
-        "grid.alpha": 0.3,
-        "font.size": 11,
-    }
-)
+plt.rcParams.update({
+    "figure.dpi": 130,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.grid": True,
+    "grid.alpha": 0.3,
+    "font.size": 11,
+})
 
 
 def load_data():
@@ -60,13 +58,7 @@ def plot_loss_curve(history: list) -> None:
     ax.plot(steps, train_l, label="Train Huber", linewidth=1.6)
     ax.plot(steps, val_l, label="Val Huber", linewidth=1.6, linestyle="--")
     best_step = steps[int(np.argmin(val_l))]
-    ax.axvline(
-        best_step,
-        color="gray",
-        linestyle=":",
-        linewidth=1,
-        label=f"Best val (step {best_step})",
-    )
+    ax.axvline(best_step, color="gray", linestyle=":", linewidth=1, label=f"Best val (step {best_step})")
     ax.set_xlabel("Step")
     ax.set_ylabel("Huber Loss")
     ax.set_title("Training & Validation Loss")
@@ -91,18 +83,16 @@ def plot_metrics_per_step(metrics: dict) -> None:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
-    ax1.bar(x - width / 2, mae, width, label="MAE", color="#4C72B0")
-    ax1.bar(x + width / 2, rmse, width, label="RMSE", color="#DD8452")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(horizons)
+    ax1.bar(x - width/2, mae, width, label="MAE", color="#4C72B0")
+    ax1.bar(x + width/2, rmse, width, label="RMSE", color="#DD8452")
+    ax1.set_xticks(x); ax1.set_xticklabels(horizons)
     ax1.set_ylabel("Log-return error")
     ax1.set_title("MAE & RMSE per Horizon Step")
     ax1.legend()
 
     ax2.bar(x, dir_acc, color="#55A868")
     ax2.axhline(0.5, color="gray", linestyle="--", linewidth=1, label="Random (50%)")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(horizons)
+    ax2.set_xticks(x); ax2.set_xticklabels(horizons)
     ax2.set_ylabel("Directional accuracy")
     ax2.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1))
     ax2.set_title("Directional Accuracy per Horizon Step")
@@ -124,11 +114,8 @@ def plot_scatter(preds: np.ndarray, targets: np.ndarray) -> None:
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.scatter(t, p, s=3, alpha=0.25, rasterized=True, color="#4C72B0")
     bound = lim
-    ax.plot(
-        [-bound, bound], [-bound, bound], "r--", linewidth=1, label="Perfect forecast"
-    )
-    ax.set_xlim(-bound, bound)
-    ax.set_ylim(-bound, bound)
+    ax.plot([-bound, bound], [-bound, bound], "r--", linewidth=1, label="Perfect forecast")
+    ax.set_xlim(-bound, bound); ax.set_ylim(-bound, bound)
     ax.set_xlabel("Actual log-return (h+1)")
     ax.set_ylabel("Predicted log-return (h+1)")
     ax.set_title("Predicted vs Actual (h+1)")
@@ -142,9 +129,9 @@ def plot_scatter(preds: np.ndarray, targets: np.ndarray) -> None:
 # ── 4. Long-short equity curve ─────────────────────────────────────────────────
 def plot_equity_curve(preds: np.ndarray, targets: np.ndarray) -> None:
     """Unit-sized long-short: sign(pred_h1) × actual_h1."""
-    signal = np.sign(preds[:, 0])  # +1 long / -1 short
+    signal = np.sign(preds[:, 0])          # +1 long / -1 short
     strategy_ret = signal * targets[:, 0]  # realised return
-    buy_hold_ret = targets[:, 0]  # passive long
+    buy_hold_ret = targets[:, 0]           # passive long
 
     cum_strat = np.cumprod(1 + np.clip(strategy_ret, -0.5, 0.5))
     cum_bh = np.cumprod(1 + np.clip(buy_hold_ret, -0.5, 0.5))
@@ -159,14 +146,8 @@ def plot_equity_curve(preds: np.ndarray, targets: np.ndarray) -> None:
     ax.legend()
 
     sharpe = float(strategy_ret.mean() / (strategy_ret.std() + 1e-12) * np.sqrt(252))
-    ax.text(
-        0.02,
-        0.05,
-        f"Ann. Sharpe ~ {sharpe:.2f}",
-        transform=ax.transAxes,
-        fontsize=10,
-        color="steelblue",
-    )
+    ax.text(0.02, 0.05, f"Ann. Sharpe ~ {sharpe:.2f}",
+            transform=ax.transAxes, fontsize=10, color="steelblue")
 
     fig.tight_layout()
     fig.savefig(PLOTS / "equity_curve.png")
@@ -186,11 +167,9 @@ def main() -> None:
     if preds is not None:
         metrics = results["test_metrics"]
         agg = metrics["aggregate"]
-        print(
-            f"  Test | MAE={agg['mae']:.5f}  RMSE={agg['rmse']:.5f}  "
-            f"DirAcc={agg['directional_acc_pct']:.1f}%  "
-            f"PredSharpe={agg['sharpe_pred']:.3f}"
-        )
+        print(f"  Test | MAE={agg['mae']:.5f}  RMSE={agg['rmse']:.5f}  "
+              f"DirAcc={agg['directional_acc_pct']:.1f}%  "
+              f"PredSharpe={agg['sharpe_pred']:.3f}")
         print(f"  Test windows: {len(preds)}")
         plot_metrics_per_step(metrics)
         plot_scatter(preds, targets)

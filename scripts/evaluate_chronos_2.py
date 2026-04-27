@@ -27,17 +27,17 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.data.csv_reader_chronos_2 import read_stock_directory
-from src.dataLoader.loader_chronos_2 import EvaluationSplitter
-from src.dataset.time_series_dataset_chronos_2 import from_dataframe
-from src.models.chronos_wrapper_chronos_2 import ChronosForecaster
 from src.preProcessing.preprocessor_chronos_2 import preprocess
+from src.dataset.time_series_dataset_chronos_2 import from_dataframe
+from src.dataLoader.loader_chronos_2 import EvaluationSplitter
+from src.models.chronos_wrapper_chronos_2 import ChronosForecaster
 from src.utils.config_chronos_2 import load_configs
-from src.utils.io_chronos_2 import make_experiment_dir
 from src.utils.metrics_chronos_2 import compute_all_metrics
+from src.utils.io_chronos_2 import make_experiment_dir
 from src.utils.plotting_chronos_2 import (
-    plot_metric_distribution,
-    plot_metrics_summary,
     plot_stock_forecast,
+    plot_metrics_summary,
+    plot_metric_distribution,
 )
 
 logging.basicConfig(
@@ -108,7 +108,10 @@ def select_plot_results(
     """Select which evaluated stocks should receive forecast plots."""
     requested_tickers = plot_cfg.get("tickers") or []
     if requested_tickers:
-        result_by_ticker = {result["ticker"].lower(): result for result in all_results}
+        result_by_ticker = {
+            result["ticker"].lower(): result
+            for result in all_results
+        }
         selected_results: List[Dict[str, Any]] = []
         missing_tickers: List[str] = []
 
@@ -158,7 +161,9 @@ def _reconstruct_price_space_views(
         price_values = original_targets[col]
         end_idx = len(price_values) - 1 - prediction_length
         if end_idx < 0:
-            raise ValueError(f"Ticker series is too short after transform for '{col}'.")
+            raise ValueError(
+                f"Ticker series is too short after transform for '{col}'."
+            )
 
         anchor_price = float(price_values[end_idx])
 
@@ -361,9 +366,7 @@ def evaluate_single_stock(
     # Generate pseudo-samples from quantiles for CRPS computation
     num_samples = model_cfg.get("num_samples", 100)
     samples = ChronosForecaster.quantiles_to_pseudo_samples(
-        quantile_forecast,
-        quantile_levels,
-        num_samples=num_samples,
+        quantile_forecast, quantile_levels, num_samples=num_samples,
     )
 
     # Ground truth + seasonal errors in the model's forecasting space.
@@ -382,9 +385,7 @@ def evaluate_single_stock(
         price_views = _reconstruct_price_space_views(
             target_columns=target_columns,
             original_targets=original_targets,
-            original_timestamps=pd.to_datetime(df[ts_col]).to_numpy(
-                dtype="datetime64[ns]"
-            ),
+            original_timestamps=pd.to_datetime(df[ts_col]).to_numpy(dtype="datetime64[ns]"),
             batches=batches,
             prediction_length=prediction_length,
             ground_truth=ground_truth,
@@ -429,9 +430,9 @@ def evaluate_single_stock(
             "price",
         )
 
-        transformed_timestamps = pd.to_datetime(transformed_df[ts_col]).to_numpy(
-            dtype="datetime64[ns]"
-        )
+        transformed_timestamps = pd.to_datetime(
+            transformed_df[ts_col]
+        ).to_numpy(dtype="datetime64[ns]")
         for idx, batch in enumerate(batches):
             context_len = int(len(batch.context))
             total_context_len = len(datasets[idx].values) - prediction_length
@@ -481,7 +482,9 @@ def main() -> None:
     sample_ratio = dataset_cfg.get("sample_ratio", 0.2)
     sample_seed = dataset_cfg.get("sample_seed", 42)
 
-    logger.info("Scanning %s (sampling %.0f%%)...", csv_dir, sample_ratio * 100)
+    logger.info(
+        "Scanning %s (sampling %.0f%%)...", csv_dir, sample_ratio * 100
+    )
     stock_dfs = read_stock_directory(
         directory=csv_dir,
         timestamp_column=dataset_cfg.get("timestamp_column", "Date"),
@@ -511,9 +514,7 @@ def main() -> None:
             if len(df) <= prediction_length + 1:
                 logger.warning(
                     "Skipping %s: only %d rows (need >%d)",
-                    ticker,
-                    len(df),
-                    prediction_length + 1,
+                    ticker, len(df), prediction_length + 1,
                 )
                 skipped.append(ticker)
                 continue
@@ -555,9 +556,8 @@ def main() -> None:
             global_agg[metric_name] = float(np.mean(values))
 
     # ---- 6. Save results ----
-    import json
-
     import pandas as pd
+    import json
     import yaml
 
     output_dir = eval_cfg.get("output_dir", "experiments")

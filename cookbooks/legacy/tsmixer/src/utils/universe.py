@@ -1,6 +1,5 @@
 """Universe selection: rank tickers by liquidity over a date window, take top N."""
 from __future__ import annotations
-
 from pathlib import Path
 from typing import List, Tuple
 
@@ -20,11 +19,7 @@ def liquidity_score(df: pd.DataFrame, start: str, end: str) -> Tuple[float, int]
     w = df.loc[mask]
     if w.empty:
         return 0.0, 0
-    dv = (
-        (w["Close"].astype(float) * w["Volume"].astype(float))
-        .replace([np.inf, -np.inf], np.nan)
-        .dropna()
-    )
+    dv = (w["Close"].astype(float) * w["Volume"].astype(float)).replace([np.inf, -np.inf], np.nan).dropna()
     if dv.empty:
         return 0.0, int(len(w))
     return float(dv.median()), int(len(w))

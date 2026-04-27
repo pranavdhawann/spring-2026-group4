@@ -25,9 +25,7 @@ from src.preProcessing.data_preprocessing_chronos_t5 import load_ticker
 from src.utils.metrics_utils import calculate_regression_metrics, print_metrics
 
 
-def _resolve_history_csv(
-    data_dir: Path, ticker: str, file_path: Optional[str]
-) -> Optional[Path]:
+def _resolve_history_csv(data_dir: Path, ticker: str, file_path: Optional[str]) -> Optional[Path]:
     if file_path:
         p = Path(file_path)
         if p.exists():
@@ -71,21 +69,9 @@ def _to_close_from_log_returns(last_close: float, log_returns: pd.Series) -> pd.
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate Chronos batch forecasts.")
-    parser.add_argument(
-        "--manifest_path",
-        type=str,
-        required=True,
-        help="Path to manifest JSON used for forecasting",
-    )
-    parser.add_argument(
-        "--data_dir", type=str, required=True, help="Directory containing raw CSV files"
-    )
-    parser.add_argument(
-        "--forecast_dir",
-        type=str,
-        required=True,
-        help="Directory with per-ticker forecast CSV files",
-    )
+    parser.add_argument("--manifest_path", type=str, required=True, help="Path to manifest JSON used for forecasting")
+    parser.add_argument("--data_dir", type=str, required=True, help="Directory containing raw CSV files")
+    parser.add_argument("--forecast_dir", type=str, required=True, help="Directory with per-ticker forecast CSV files")
     parser.add_argument(
         "--forecast_target_col",
         type=str,
@@ -138,9 +124,7 @@ def main():
             skipped += 1
             continue
 
-        hist_df = pd.DataFrame(
-            {"Date": pd.to_datetime(close_dates), "Actual_Close": close_vals}
-        )
+        hist_df = pd.DataFrame({"Date": pd.to_datetime(close_dates), "Actual_Close": close_vals})
         fcast_df = pd.read_csv(fcast_csv)
         if "Date" not in fcast_df.columns:
             skipped += 1
@@ -150,9 +134,7 @@ def main():
 
         pred_close_col = _pick_col(fcast_df, ["Point_Forecast_Close"])
         low_close_col = _pick_col(fcast_df, ["Quantile_10_Close", "Forecast_P10_Close"])
-        high_close_col = _pick_col(
-            fcast_df, ["Quantile_90_Close", "Forecast_P90_Close"]
-        )
+        high_close_col = _pick_col(fcast_df, ["Quantile_90_Close", "Forecast_P90_Close"])
         point_col = _pick_col(fcast_df, ["Point_Forecast", "Forecast_Median"])
         low_col = _pick_col(fcast_df, ["Quantile_10", "Forecast_P10"])
         high_col = _pick_col(fcast_df, ["Quantile_90", "Forecast_P90"])
@@ -192,17 +174,13 @@ def main():
             pred_df["Low_Close"] = low_close.to_numpy()
             pred_df["High_Close"] = high_close.to_numpy()
 
-        merged = pred_df.merge(hist_df, on="Date", how="left").dropna(
-            subset=["Pred_Close", "Actual_Close"]
-        )
+        merged = pred_df.merge(hist_df, on="Date", how="left").dropna(subset=["Pred_Close", "Actual_Close"])
         if merged.empty:
             skipped += 1
             continue
 
         try:
-            m = calculate_regression_metrics(
-                merged["Actual_Close"].values, merged["Pred_Close"].values
-            )
+            m = calculate_regression_metrics(merged["Actual_Close"].values, merged["Pred_Close"].values)
         except Exception:
             skipped += 1
             continue
@@ -219,12 +197,9 @@ def main():
             }
         )
 
-        history_window = (
-            hist_df[hist_df["Date"] < fcast_df["Date"].min()].tail(60).copy()
-        )
+        history_window = hist_df[hist_df["Date"] < fcast_df["Date"].min()].tail(60).copy()
         actual_window = hist_df[
-            (hist_df["Date"] >= fcast_df["Date"].min())
-            & (hist_df["Date"] <= fcast_df["Date"].max())
+            (hist_df["Date"] >= fcast_df["Date"].min()) & (hist_df["Date"] <= fcast_df["Date"].max())
         ].copy()
         plot_payload[ticker] = {
             "history_window": history_window,
@@ -262,9 +237,7 @@ def main():
 
     print(f"Saved: {per_ticker_path}")
     print(f"Saved: {aggregate_path}")
-    print(
-        f"Tickers evaluated: {aggregate['num_tickers']} | skipped: {aggregate['skipped_tickers']}"
-    )
+    print(f"Tickers evaluated: {aggregate['num_tickers']} | skipped: {aggregate['skipped_tickers']}")
     print("\nPer-ticker metrics:")
     for _, row in per_ticker.iterrows():
         print(
@@ -345,9 +318,7 @@ def main():
         ax.grid(alpha=0.25, linestyle=":")
         ax.legend(loc="best", fontsize=8)
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-        ax.xaxis.set_major_formatter(
-            mdates.ConciseDateFormatter(ax.xaxis.get_major_locator())
-        )
+        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.xaxis.get_major_locator()))
 
     for i in range(plotted, len(axes_flat)):
         axes_flat[i].axis("off")

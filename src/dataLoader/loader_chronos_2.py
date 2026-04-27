@@ -125,9 +125,13 @@ class EvaluationSplitter:
             if len(context_values) > self.max_context_length:
                 context_values = context_values[-self.max_context_length :]
 
-            seasonal_error = _compute_seasonal_error(context_values, ds.seasonality)
+            seasonal_error = _compute_seasonal_error(
+                context_values, ds.seasonality
+            )
 
-            context_tensor = torch.tensor(context_values, dtype=torch.float32)
+            context_tensor = torch.tensor(
+                context_values, dtype=torch.float32
+            )
 
             batches.append(
                 EvaluationBatch(
