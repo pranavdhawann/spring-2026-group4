@@ -1,0 +1,272 @@
+================================================================================
+         TEMPORAL FUSION TRANSFORMER (TFT) — MODEL FLOW
+================================================================================
+
+
+INPUT
+─────
+  Shape: (Batch, 60, 12)
+  Content: 60 days of 12 Z-score standardized features
+  Features: Open, High, Low, Close, Volume,
+            Bollinger Upper/Middle/Lower, RSI,
+            MACD Line, MACD Signal, MACD Histogram
+
+
+STEP 1: VARIABLE SELECTION NETWORK (VSN)
+────────────────────────────────────────
+  Purpose: Learn which of the 12 features matter most at each time step.
+
+  How it works:
+    - Each of the 12 features gets its own GRN (Gated Residual Network).
+      Feature i (a scalar) goes through GRN_i and becomes a 128-dim vector.
+      This happens independently for all 12 features at all 60 time steps.
+
+    - A separate "selection GRN" takes ALL 12 raw features concatenated
+      and produces a softmax weight vector of size 12.
+      These weights sum to 1.0 and represent feature importance.
+
+    - The 12 transformed vectors are multiplied by their selection weights
+      and summed into a single 128-dim vector per time step.
+
+  Output: (Batch, 60, 128) — selected features
+  Side output: (Batch, 60, 12) — variable importance weights (interpretable)
+
+
+STEP 2: LSTM ENCODER
+─────────────────────
+  Purpose: Process the sequence step-by-step to capture temporal dependencies.
+
+  How it works:
+    - A 1-layer LSTM with hidden_size=128 reads the selected features
+      sequentially from day 1 to day 60.
+    - At each step, it updates its hidden state based on the current input
+      and the accumulated history.
+    - Unlike the Transformer's parallel processing, the LSTM is inherently
+      order-aware — it processes day 1 before day 2 before day 3, etc.
+
+  Output: (Batch, 60, 128) — temporal encodings
+
+
+STEP 3: GATED SKIP CONNECTION OVER LSTM
+───────────────────────────────────────
+  Purpose: Let the model choose how much LSTM processing to apply vs.
+           passing the original features through unchanged.
+
+  How it works:
+    - LSTM output goes through a GLU (Gated Linear Unit):
+        GLU(x) = sigmoid(W1*x) * (W2*x)
+      The sigmoid produces values 0-1 that act as a gate.
+      If the gate is 0, the LSTM output is blocked.
+      If the gate is 1, the LSTM output passes through fully.
+
+    - The gated output is ADDED to the original VSN output (skip connection).
+    - LayerNorm is applied to stabilize the combined result.
+
+  Why: If the LSTM learns nothing useful for a particular feature or time
+       step, the skip connection ensures the original information survives.
+
+  Output: (Batch, 60, 128) — temporal features
+
+
+STEP 4: SINUSOIDAL POSITIONAL ENCODING
+───────────────────────────────────────
+  Purpose: Give the attention mechanism explicit information about
+           the position (day number) of each time step.
+
+  How it works:
+    - Fixed sine/cosine waves of different frequencies are added to
+      the hidden vectors.
+    - Day 1 gets a unique positional pattern, day 2 gets a different one, etc.
+    - This is NOT learned — it's a fixed mathematical function.
+
+  Why: Self-attention treats all positions equally by default (it's
+       permutation-invariant). Without positional encoding, the model
+       can't distinguish day 5 from day 50.
+
+  Output: (Batch, 60, 128) — position-aware features
+
+
+STEP 5: INTERPRETABLE MULTI-HEAD ATTENTION
+──────────────────────────────────────────
+  Purpose: Let each time step attend to all other time steps to capture
+           long-range dependencies (e.g., day 60 looking back at day 10).
+
+  How it works:
+    - 4 attention heads, each with query/key dimension = 32.
+    - Each head computes: Attention(Q, K, V) = softmax(QK^T / sqrt(32)) * V
+    - KEY DIFFERENCE from standard Transformer: all 4 heads share the
+      same Value (V) projection. Only Q and K are per-head.
+    - The attention weights from all 4 heads are AVERAGED into a single
+      attention map, then applied to the shared V.
+
+  Why shared values:
+    - Makes the averaged attention weights directly interpretable.
+    - In standard MHA, each head has its own V, so you can't simply
+      average attention weights across heads and get a meaningful result.
+    - With shared V, the averaged weights tell you exactly "how much did
+      the model look at day X when predicting day Y."
+
+  Output: (Batch, 60, 128) — attention-enriched features
+  Side output: (Batch, 60, 60) — attention weight matrix (interpretable)
+
+
+STEP 6: GATED SKIP CONNECTION OVER ATTENTION
+────────────────────────────────────────────
+  Purpose: Same as Step 3 — let the model gate how much attention
+           processing to apply, with a skip from the pre-attention features.
+
+  How it works:
+    - Attention output -> GLU -> add pre-attention features -> LayerNorm
+
+  Output: (Batch, 60, 128) — enriched features
+
+
+STEP 7: POSITION-WISE OUTPUT GRN
+─────────────────────────────────
+  Purpose: Final non-linear transformation before output.
+
+  How it works:
+    - Each time step's 128-dim vector is independently processed by a GRN.
+    - Adds one more layer of learned non-linearity beyond what the
+      attention mechanism provides.
+
+  Output: (Batch, 60, 128) — final enriched features
+
+
+STEP 8: LAST TIME STEP EXTRACTION
+──────────────────────────────────
+  Purpose: Select the single most informative representation for forecasting.
+
+  How it works:
+    - Simply take the hidden vector at position 60 (the last day):
+        pooled = features[:, -1, :]
+
+  Why not Global Average Pooling:
+    - Averaging all 60 vectors causes all samples to look similar
+      (Central Limit Theorem — mean of 60 vectors has low variance).
+    - This caused every test sample to produce the SAME prediction shape.
+    - The last time step already "knows" about all 60 days because of
+      self-attention — it attended to every other position.
+    - But it's anchored at the most recent position, preserving
+      sample-specific recency information.
+
+  Output: (Batch, 128) — single summary vector per sample
+
+
+STEP 9: LINEAR PROJECTION + RESIDUAL
+─────────────────────────────────────
+  Purpose: Map the 128-dim vector to 5 price predictions.
+
+  How it works:
+    1. Linear layer: 128 -> 5 (one value per forecast day)
+       This predicts the CHANGE from the current price (in Z-score space).
+
+    2. Residual addition: Add the last known Z-scored close price.
+       final_prediction = predicted_change + last_close_zscore
+
+  Why residual:
+    - Without it, the model must independently predict the absolute
+      price level for each stock — which varies wildly ($5 to $500+).
+    - With it, the model only needs to predict the CHANGE from the
+      current price, which is much smaller and more learnable.
+    - If the model predicts zero change, the output is just the last
+      known price repeated — a reasonable naive baseline.
+
+  Output: (Batch, 5) — Z-score standardized 5-day close price forecast
+
+
+POST-PROCESSING (during evaluation only)
+─────────────────────────────────────────
+  Convert back to dollar prices:
+    price_dollars = prediction_zscore * close_std + close_mean
+
+  where close_std and close_mean are computed from the training set.
+
+
+================================================================================
+         COMPONENT DETAILS
+================================================================================
+
+
+GATED RESIDUAL NETWORK (GRN)
+─────────────────────────────
+  Used in: VSN (12 per-variable GRNs + 1 selection GRN), Output enrichment
+
+  Flow:
+    input -> Dense(hidden) -> ELU activation -> Dense(hidden)
+                                                    |
+                                               GLU gate
+                                                    |
+                                            + skip connection
+                                                    |
+                                              LayerNorm
+                                                    |
+                                                 output
+
+  The GLU gate (sigmoid * linear) decides how much information passes
+  through. Combined with the skip connection, this means the GRN can
+  learn to be anything from a no-op (pass input unchanged) to a full
+  non-linear transformation.
+
+
+GATED LINEAR UNIT (GLU)
+────────────────────────
+  Used in: Skip connections over LSTM and Attention, inside GRNs
+
+  Formula: GLU(x) = sigmoid(W1*x + b1) * (W2*x + b2)
+
+  The sigmoid output (0 to 1) acts as a gate:
+    - Near 0: block this dimension
+    - Near 1: pass this dimension through
+  This is analogous to the forget gate in LSTMs.
+
+
+================================================================================
+         WHY THESE DESIGN CHOICES
+================================================================================
+
+
+Q: Why was RevIN removed?
+A: The input data is already Z-score standardized. RevIN applies a SECOND
+   instance-level normalization. This double normalization created a domain
+   mismatch for the residual skip connection — the residual operated in
+   RevIN space but targets were in Z-score space. When the model predicted
+   zero change, the RevIN denorm collapsed the output to a constant flat
+   line. Removing RevIN fixed this.
+
+Q: Why LSTM + Attention instead of just Attention?
+A: The LSTM provides sequential inductive bias (it inherently understands
+   order), while attention provides parallel long-range dependency modeling.
+   The LSTM captures local temporal patterns; attention captures global
+   patterns. Together, they cover both scales.
+
+Q: Why single-shot output instead of autoregressive?
+A: Autoregressive forecasting (predict day 1, feed it back, predict day 2,
+   ...) accumulates errors. Each prediction uses the previous (potentially
+   wrong) prediction as input. Single-shot predicts all 5 days at once,
+   avoiding this error cascade.
+
+Q: Why 914K parameters (not larger)?
+A: Stock data is inherently noisy. Larger models overfit to noise faster.
+   The TFT's 914K params (vs TCN's 2.1M) is already sufficient — the
+   variable selection and gating mechanisms provide modeling power without
+   needing raw parameter count.
+
+
+================================================================================
+         MODEL SUMMARY
+================================================================================
+
+  Architecture:     Temporal Fusion Transformer (Lim et al., 2021)
+  Parameters:       914,177 (all trainable)
+  Input:            (Batch, 60, 12)
+  Output:           (Batch, 5)
+  Loss Function:    HuberLoss (delta=1.0)
+  Optimizer:        Adam (lr=1e-4)
+  LR Scheduler:     ReduceLROnPlateau (factor=0.5, patience=3)
+  Gradient Clip:    max_norm=1.0
+  Batch Size:       32
+  Early Stopping:   patience=10
+  Data Split:       80/20 chronological per ticker (no leakage)
+
+================================================================================

@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from transformers import AutoTokenizer
 
 from .preProcessMultiModalFinBert import preprocessFinbertMMBaseline
+from .preProcessMultiModalTabNet import preprocessTabNetMMBaseline
 from .preProcessMultiModalTCN import preprocessTCNMMBaseline
 
 
@@ -42,6 +43,7 @@ class MultiModalPreProcessing(object):
             articles_ = b["articles"]
             time_series_ = b["time_series"]
             # table_data_ = b["table_data"]
+            table_data_ = b["table_data"]
             sector_ = b["sector"]
             target_ = b["target"]
             ticker_text_ = b["ticker_text"]
@@ -64,6 +66,13 @@ class MultiModalPreProcessing(object):
             _scaler = StandardScaler()
             scaled_ts_features = _scaler.fit_transform(raw_ts_features)
 
+            pre_processed_articles = preprocessFinbertMMBaseline(
+                articles_, dates_, self.tokenizer, self.config
+            )
+            pre_processed_tabnet = preprocessTabNetMMBaseline(
+                articles_, time_series_, table_data_, self.config, verbose=verbose
+            )
+
             X_ = {
                 "tokenized_news_": pre_processed_articles[
                     0
@@ -72,6 +81,7 @@ class MultiModalPreProcessing(object):
                     1
                 ],  # (Input_window_size, article_len)
                 "time_series_features_": scaled_ts_features,
+                "tabnet_features_": pre_processed_tabnet,  # (n_features,) for TabNet
                 "ticker_text_": ticker_text_,
                 "ticker_id_": ticker_id_,
                 "sector_": sector_,
@@ -85,6 +95,9 @@ class MultiModalPreProcessing(object):
                     ts_close = day_data.get("close", np.nan) if day_data else np.nan
                 except IndexError:
                     ts_close = np.nan
+                ts_close = (
+                    b["time_series"][day]["close"] if b["time_series"][day] else np.nan
+                )
                 closes.append(ts_close)
             closes = self._replace_none_with_avg_np(closes)
             mean, std, closes = self._standardize_list_np(closes)

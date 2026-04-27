@@ -1,0 +1,43 @@
+# ==============================================================================
+# Temporal GNN Stock Forecasting - Core dependencies
+# Target: PyTorch 2.11.0 + CUDA 12.8 + A10G
+#
+# INSTALL ORDER:
+#   1. Install PyTorch first:
+#      pip install torch --index-url https://download.pytorch.org/whl/cu128
+#
+#   2. Then install the core project dependencies:
+#      pip install -r requirements_gnn.txt
+#
+# OPTIONAL:
+#   torch-geometric-temporal is not listed here on purpose. The model falls
+#   back to a PyG + GRU implementation when it is unavailable, and the package
+#   metadata often pulls in source-built extras (torch-sparse / torch-scatter)
+#   that fail on fresh environments.
+#   If you specifically want EvolveGCN-H, install it separately after torch:
+#      pip install -r requirements-optional-temporal_gnn.txt --no-deps
+# ==============================================================================
+
+# --- Graph Neural Networks ---
+torch-geometric>=2.5.0
+
+# --- NLP / FinBERT ---
+transformers>=4.30.0
+
+# --- Data ---
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+scipy>=1.11.0
+
+# --- Experiment Tracking (optional - training works without these) ---
+wandb>=0.15.0
+tensorboard>=2.14.0
+
+# --- Utilities ---
+pyyaml>=6.0
+tqdm>=4.65.0
+pandas_market_calendars>=4.3.0
+
+# --- Visualization ---
+matplotlib>=3.7.0

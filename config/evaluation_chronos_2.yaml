@@ -1,0 +1,25 @@
+evaluation:
+  prediction_length: 5
+  quantile_levels:
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+
+  metrics:
+    - mse
+    - mae
+    - mase
+    - smape
+
+  output_dir: "experiments"
+
+  plot:
+    enabled: true
+    num_stocks: 10
+    context_days_shown: 30

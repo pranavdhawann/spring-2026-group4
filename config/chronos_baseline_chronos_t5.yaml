@@ -1,0 +1,16 @@
+model_name: "amazon/chronos-t5-large"
+target_column: "Close"
+forecast_target: "log_return"        # Forecast log-returns, then invert to Close
+forecast_horizon: 5                   # 5 trading days = 1 business week (was 7)
+num_samples: 200                      # Stable quantile estimates (was 20)
+device: "cuda"
+data_dir: "data/sp500_time_series/"   # Fixed path (was "data/raw/")
+plot_dir: "experiments/baseline/chronos/plots"
+context_length: 512                   # Full T5 capacity ~2 yrs of daily data (was 60)
+seed: 42
+manifest_path: "data/chronos_manifest.json"
+
+# --- Data quality filters ---
+min_close_price: 1.00                 # Skip penny stocks (Close < $1)
+max_zero_volume_pct: 0.10             # Skip tickers with > 10% zero-volume days
+min_history_rows: 512                 # Need at least context_length rows of history

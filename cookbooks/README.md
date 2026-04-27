@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Cookbooks
 
 This folder contains Jupyter notebooks used as cookbooks for experimentation, including:
@@ -5,3 +6,9 @@ This folder contains Jupyter notebooks used as cookbooks for experimentation, in
 - Data preprocessing
 - Model training
 - General experimentation and prototyping
+=======
+﻿# Cookbooks
+
+Reproducible notebooks for EDA, preprocessing checks, ablations, and result walkthroughs.
+Use these notebooks to replicate key experiments step by step.
+>>>>>>> main

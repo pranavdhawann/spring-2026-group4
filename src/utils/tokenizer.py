@@ -66,6 +66,7 @@ def tokenize_sentences(sentences, tokenizer, config, verbose=False):
         max_length=cfg["max_length"],
         return_tensors=cfg["return_tensors"],
         local_files_only=cfg["local_files_only"],
+        return_tensors=cfg.get("return_tensors", "pt"),
         stride=cfg["news_stride"],
         return_overflowing_tokens=True,
     )

@@ -1,0 +1,9 @@
+# Optional dependency for the EvolveGCN-H layer.
+#
+# Install only after PyTorch and the core requirements are already present:
+#   pip install -r requirements-optional-temporal_gnn.txt --no-deps
+#
+# This package is kept out of requirements_gnn.txt because its dependency metadata
+# may still trigger source builds for torch-sparse / torch-scatter on some
+# Python + CUDA combinations.
+torch-geometric-temporal>=0.54.0
