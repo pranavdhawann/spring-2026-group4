@@ -69,23 +69,20 @@ def import_from_path(module_name, path):
     return module
 
 
-def import_optional_module(module_name, fallback_path=None, aliases=()):
-    try:
-        return importlib.import_module(module_name)
-    except ImportError:
-        if fallback_path and os.path.exists(fallback_path):
-            module = import_from_path(module_name, fallback_path)
-            for alias in aliases:
-                sys.modules[alias] = module
-            return module
-        raise
+def import_module_from_repo_path(module_name, path, aliases=()):
+    if not os.path.exists(path):
+        raise ImportError(f"Missing module file: {path}")
+    module = import_from_path(module_name, path)
+    for alias in aliases:
+        sys.modules[alias] = module
+    return module
 
 
 try:
-    tft_model_module = import_optional_module(
-        "src.models.tft_model",
-        fallback_path=EXPERIMENT_TFT_MODEL_PATH,
-        aliases=("tft_model",),
+    tft_model_module = import_module_from_repo_path(
+        "demo_tft_model",
+        EXPERIMENT_TFT_MODEL_PATH,
+        aliases=("tft_model", "src.models.tft_model"),
     )
     TFTModel = tft_model_module.TFTModel
 except ImportError as exc:
@@ -93,9 +90,10 @@ except ImportError as exc:
     TFT_IMPORT_ERROR = exc
 
 try:
-    multimodal_module = import_optional_module(
-        "TftMultiModalBaseline",
-        fallback_path=EXPERIMENT_TFT_MULTIMODAL_PATH,
+    multimodal_module = import_module_from_repo_path(
+        "demo_tft_multimodal",
+        EXPERIMENT_TFT_MULTIMODAL_PATH,
+        aliases=("TftMultiModalBaseline", "src.models.TftMultiModalBaseline"),
     )
     TftMultiModalStockPredictor = multimodal_module.MultiModalStockPredictor
 except ImportError as exc:
@@ -165,6 +163,28 @@ MODEL_CHOICES = [
     "LSTM",
     "TSMixer",
 ]
+TFT_FEATURES = [
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "bb_upper",
+    "bb_middle",
+    "bb_lower",
+    "rsi",
+    "macd",
+    "macd_signal",
+    "macd_histogram",
+]
+
+
+def resolve_demo_experiment_path(model_type, config):
+    if model_type in ("TFT", "Standalone TFT (Numerical)"):
+        return DEMO_MODEL_PATHS["TFT"]
+    if model_type in ("TFT-FinBERT", "TFT-FinBERT (Multimodal)"):
+        return DEMO_MODEL_PATHS["TFT-FinBERT"]
+    return config.get("experiment_path")
 
 SELECT_PLACEHOLDER = "Select"
 
@@ -545,6 +565,11 @@ def fetch_news_data(ticker, max_articles=4):
 
 
 def preprocess_data(df):
+    return preprocess_tft_input_window(df)
+
+
+def preprocess_tft_input_window(df):
+    df = df.copy()
     close_prices = df['close']
 
     bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(close_prices)
@@ -561,8 +586,35 @@ def preprocess_data(df):
     return df
 
 
+def fit_tft_input_scaler(model_type, model_input_data, processed_df, features, experiment_path):
+    if "TFT-FinBERT" in model_type:
+        scaler = StandardScaler()
+        scaler.fit(model_input_data[features].values)
+        return scaler
+
+    scaler_path = os.path.join(experiment_path, 'preprocessed_data.pkl')
+    if os.path.exists(scaler_path):
+        with open(scaler_path, 'rb') as f:
+            pp = pickle.load(f)
+        scaler = pp.get('scaler')
+        if scaler is not None:
+            return scaler
+
+    scaler = StandardScaler()
+    scaler.fit(processed_df[features].values)
+    return scaler
+
+
 def get_available_models():
     return MODEL_CHOICES
+
+
+def should_wait_for_run_click(model_choice, ticker, run_clicked):
+    return (
+        model_choice != SELECT_PLACEHOLDER
+        and ticker != SELECT_PLACEHOLDER
+        and not run_clicked
+    )
 
 
 def get_missing_dependency_messages():
@@ -789,12 +841,12 @@ def load_model(config, model_type="TFT"):
             raise RuntimeError(f"TFT model definition is unavailable: {TFT_IMPORT_ERROR}")
         model_config = config.get('model', {})
         model = TFTModel(model_config).to(device)
-        experiment_path = config.get('experiment_path', DEMO_MODEL_PATHS["TFT"])
+        experiment_path = resolve_demo_experiment_path(model_type, config)
     elif model_type in ("TFT-FinBERT", "TFT-FinBERT (Multimodal)"):
         if TftMultiModalStockPredictor is None:
             raise RuntimeError(f"Multimodal TFT definition is unavailable: {MULTIMODAL_IMPORT_ERROR}")
         model = TftMultiModalStockPredictor(config, num_tickers=234, num_sectors=13).to(device)
-        experiment_path = config.get('experiment_path_tft_multimodal', DEMO_MODEL_PATHS["TFT-FinBERT"])
+        experiment_path = resolve_demo_experiment_path(model_type, config)
     elif "LSTM" in model_type:
         if LSTMForecaster is None:
             raise RuntimeError(f"LSTM runtime is unavailable: {LEGACY_IMPORT_ERROR}")
@@ -990,6 +1042,13 @@ def main():
         st.sidebar.error("Transformers library not available. Start Streamlit with:\n`python3 -m streamlit run demo/app.py --server.fileWatcherType none`")
         return
 
+    if should_wait_for_run_click(model_choice, ticker, run_clicked):
+        st.markdown(
+            f"<div class='terminal-meta' style='padding:50px 24px;'>BACKTEST READY &middot; Press <span style='color:{ACCENT_ORANGE}'>RUN BACKTEST</span> to fetch data and evaluate the most recent historical window.</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
     backtest_horizon = 5
     try:
         yaml_config = read_yaml(CONFIG_PATH)
@@ -1017,13 +1076,6 @@ def main():
         return
 
     backtest_start_date = get_latest_backtest_start_date(valid_backtest_dates)
-
-    if not run_clicked:
-        st.markdown(
-            f"<div class='terminal-meta' style='padding:50px 24px;'>BACKTEST READY &middot; Press <span style='color:{ACCENT_ORANGE}'>RUN BACKTEST</span> to evaluate the most recent historical window.</div>",
-            unsafe_allow_html=True,
-        )
-        return
 
     is_multimodal = "TFT-FinBERT" in model_choice
     with st.spinner(f"Loading {model_choice}..."):
@@ -1073,29 +1125,17 @@ def main():
 
     try:
         model_input_data, actual_data = prepare_backtest_window(
-            processed_df, seq_len, backtest_horizon, backtest_start_date
+            df, seq_len, backtest_horizon, backtest_start_date
         )
     except ValueError as e:
         st.error(str(e))
         return
 
-    features = ['open', 'high', 'low', 'close', 'volume',
-                'bb_upper', 'bb_middle', 'bb_lower', 'rsi',
-                'macd', 'macd_signal', 'macd_histogram']
-
+    model_input_data = preprocess_tft_input_window(model_input_data)
+    features = TFT_FEATURES
     X_raw = model_input_data[features].values
 
-    scaler_path = os.path.join(experiment_path, 'preprocessed_data.pkl')
-    scaler = None
-    if os.path.exists(scaler_path):
-        with open(scaler_path, 'rb') as f:
-            pp = pickle.load(f)
-            scaler = pp.get('scaler')
-
-    if scaler is None:
-        scaler = StandardScaler()
-        scaler.fit(processed_df[features].values)
-
+    scaler = fit_tft_input_scaler(model_type, model_input_data, processed_df, features, experiment_path)
     X_scaled = scaler.transform(X_raw)
     X_tensor = torch.tensor(X_scaled, dtype=torch.float32).unsqueeze(0).to(device)
 
