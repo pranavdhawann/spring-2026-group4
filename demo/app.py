@@ -33,9 +33,9 @@ SRC_MODELS_DIR = os.path.join(PROJECT_ROOT, "src", "models")
 SRC_PREPROCESSING_DIR = os.path.join(PROJECT_ROOT, "src", "preProcessing")
 LSTM_LEGACY_DIR = os.path.join(PROJECT_ROOT, "cookbooks", "legacy", "lstm")
 TSMIXER_LEGACY_DIR = os.path.join(PROJECT_ROOT, "cookbooks", "legacy", "tsmixer")
-EXPERIMENT_TFT_MODEL_PATH = os.path.join(PROJECT_ROOT, "experiments", "tft", "tft_model.py")
+EXPERIMENT_TFT_MODEL_PATH = os.path.join(PROJECT_ROOT, "src", "models", "tft_model.py")
 EXPERIMENT_TFT_MULTIMODAL_PATH = os.path.join(
-    PROJECT_ROOT, "experiments", "tft_finbert", "TftMultiModalBaseline.py"
+    PROJECT_ROOT, "src", "models", "TftMultiModalBaseline.py"
 )
 
 os.environ.setdefault("TRANSFORMERS_NO_TORCHVISION", "1")
