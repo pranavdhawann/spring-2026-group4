@@ -1,0 +1,39 @@
+# TFT Baseline Configuration
+
+experiment_path: 'experiments/baseline/baseline_results_tft'
+
+# Model architecture
+model:
+  input_size: 12
+  output_size: 5
+  hidden_size: 128
+  num_heads: 4
+  dropout: 0.1
+  lstm_layers: 1
+
+# Training
+training:
+  epochs: 40
+  batch_size: 32
+  learning_rate: 0.0001
+  patience: 10
+  sample_fraction: 1.0
+  gradient_clip_val: 1.0
+  weight_decay: 0.0
+
+# Preprocessing
+preprocessing:
+  features:
+    - open
+    - high
+    - low
+    - close
+    - volume
+  calculate_indicators: true
+  standardization: 'zscore'
+  target_type: 'price'
+
+# Evaluation
+evaluation:
+  num_plots: 10
+  max_scatter_points: 5000

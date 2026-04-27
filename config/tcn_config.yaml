@@ -5,20 +5,23 @@ experiment_path: 'experiments/baseline/baseline_results_tcn'
 # Model architecture
 model:
   input_size: 12
-  output_size: 7
-  num_channels: [64,128, 128, 256]
-  kernel_size: 3
-  dropout: 0.2
+  output_size: 5
+  num_channels: [64, 128, 128]
+  kernel_size: 5
+  dropout: 0.1
   hidden_size: 128
+  num_layers: 2
+  nhead: 8
 
 # Training
 training:
-  epochs: 10
+  epochs: 40
   batch_size: 32
-  learning_rate: 0.005
+  learning_rate: 0.0001
   patience: 10
   sample_fraction: 1.0
   gradient_clip_val: 1.0
+  weight_decay: 0.00001
 
 # Preprocessing
 preprocessing:

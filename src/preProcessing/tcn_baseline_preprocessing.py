@@ -16,6 +16,7 @@ def calculate_bollinger_bands(prices, window=20, num_std=2.0):
 
     return upper_band, middle_band, lower_band
 
+
 def calculate_rsi(prices, window=14):
     # RSI
     delta = prices.diff()
@@ -31,6 +32,7 @@ def calculate_rsi(prices, window=14):
 
     return rsi
 
+
 def calculate_macd(prices, fast=12, slow=26, signal=9):
     # MACD
     ema_fast = prices.ewm(span=fast, adjust=False).mean()
@@ -42,10 +44,11 @@ def calculate_macd(prices, fast=12, slow=26, signal=9):
 
     return macd_line, signal_line, histogram
 
+
 def _extract_sample_features(sample, base_features):
-    time_series = sample['time_series']
-    target = sample['target']
-    dates = sample['dates']
+    time_series = sample["time_series"]
+    target = sample["target"]
+    dates = sample["dates"]
     rows = []
     for ts_point in time_series:
         row = {}
@@ -58,25 +61,27 @@ def _extract_sample_features(sample, base_features):
 
     return features_df, target, dates
 
+
 def _calculate_indicators_for_window(features_df):
-    close_prices = features_df['close']
+    close_prices = features_df["close"]
 
     # Bollinger Bands
     bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(close_prices)
-    features_df['bb_upper'] = bb_upper.values
-    features_df['bb_middle'] = bb_middle.values
-    features_df['bb_lower'] = bb_lower.values
+    features_df["bb_upper"] = bb_upper.values
+    features_df["bb_middle"] = bb_middle.values
+    features_df["bb_lower"] = bb_lower.values
 
     # RSI
-    features_df['rsi'] = calculate_rsi(close_prices).values
+    features_df["rsi"] = calculate_rsi(close_prices).values
 
     # MACD
     macd_line, signal_line, histogram = calculate_macd(close_prices)
-    features_df['macd'] = macd_line.values
-    features_df['macd_signal'] = signal_line.values
-    features_df['macd_histogram'] = histogram.values
+    features_df["macd"] = macd_line.values
+    features_df["macd_signal"] = signal_line.values
+    features_df["macd_histogram"] = histogram.values
 
     return features_df
+
 
 def _handle_nans(features_df):
     features_df = features_df.ffill()
@@ -85,13 +90,14 @@ def _handle_nans(features_df):
 
     return features_df
 
+
 def preprocess_for_tcn(train_dataset, test_dataset, config, verbose=False):
-    preprocess_config = config.get('preprocessing', {})
+    preprocess_config = config.get("preprocessing", {})
     base_features = preprocess_config.get(
-        'features', ['open', 'high', 'low', 'close', 'volume']
+        "features", ["open", "high", "low", "close", "volume"]
     )
-    calculate_indicators = preprocess_config.get('calculate_indicators', True)
-    standardization = preprocess_config.get('standardization', 'zscore')
+    calculate_indicators = preprocess_config.get("calculate_indicators", True)
+    standardization = preprocess_config.get("standardization", "zscore")
 
     if verbose:
         print("=" * 70)
@@ -106,27 +112,24 @@ def preprocess_for_tcn(train_dataset, test_dataset, config, verbose=False):
         X_list = []
         y_list = []
 
-        iterator = tqdm(
-            range(len(dataset)),
-            desc=f"Processing {split_name}"
-        ) if verbose else range(len(dataset))
+        iterator = (
+            tqdm(range(len(dataset)), desc=f"Processing {split_name}")
+            if verbose
+            else range(len(dataset))
+        )
 
         for idx in iterator:
             sample = dataset[idx]
 
-            features_df, target, dates = _extract_sample_features(
-                sample, base_features
-            )
+            features_df, target, dates = _extract_sample_features(sample, base_features)
 
             if calculate_indicators:
                 features_df = _calculate_indicators_for_window(features_df)
 
             features_df = _handle_nans(features_df)
 
-            target = [
-                t if t is not None else np.nan
-                for t in target
-            ]
+            horizon = config.get("output_size", 5)
+            target = [t if t is not None else np.nan for t in target[:horizon]]
 
             if any(np.isnan(t) for t in target):
                 continue
@@ -167,6 +170,14 @@ def preprocess_for_tcn(train_dataset, test_dataset, config, verbose=False):
     X_train = X_train_scaled.reshape(N_train, seq_len, num_features)
     X_test = X_test_scaled.reshape(N_test, seq_len, num_features)
 
+    # CRITICAL: Scale targets (y) using the same 'close' price params (Index 3)
+    # This ensures the autoregressive loop stays in the same numerical domain.
+    close_mean = scaler.mean_[3]
+    close_std = scaler.scale_[3]
+
+    y_train = (y_train - close_mean) / (close_std + 1e-8)
+    y_test = (y_test - close_mean) / (close_std + 1e-8)
+
     if verbose:
         print("\n[4/4] Converting to tensors...")
 
@@ -178,46 +189,43 @@ def preprocess_for_tcn(train_dataset, test_dataset, config, verbose=False):
     if verbose:
         print("PREPROCESSING COMPLETE!")
         print(f"  X_train: {X_train.shape}  →  (samples, seq_len, features)")
-        print(f"  y_train: {y_train.shape}  →  (samples, 7 days)")
+        print(f"  y_train: {y_train.shape}  →  (samples, {y_train.shape[1]} days)")
         print(f"  X_test:  {X_test.shape}   →  (samples, seq_len, features)")
-        print(f"  y_test:  {y_test.shape}   →  (samples, 7 days)")
+        print(f"  y_test:  {y_test.shape}   →  (samples, {y_test.shape[1]} days)")
         print(f"  Scaler:  {type(scaler).__name__} fitted on train")
 
     return X_train, y_train, X_test, y_test, scaler
 
+
 if __name__ == "__main__":
     import os
-    from src.dataLoader import getTrainTestDataLoader
+
+    from src.dataLoader import getTrainTestDataLoaderMM
     from src.utils import read_json_file, read_yaml
 
     print("Loading configs...")
-    config = read_yaml('config/config.yaml')
-    tcn_config = read_yaml('config/tcn_config.yaml')
+    config = read_yaml("config/config.yaml")
+    tcn_config = read_yaml("config/tcn_config.yaml")
 
     ticker2idx = read_json_file(
-        os.path.join(config['BASELINE_DATA_PATH'], config['TICKER2IDX'])
+        os.path.join(config["BASELINE_DATA_PATH"], config["TICKER2IDX"])
     )
 
     data_config = {
-        'data_path': config['BASELINE_DATA_PATH'],
-        'ticker2idx': ticker2idx,
-        'test_train_split': 0.2,
-        'random_seed': 42,
+        "data_path": config["BASELINE_DATA_PATH"],
+        "ticker2idx": ticker2idx,
+        "test_train_split": 0.2,
+        "random_seed": 42,
     }
 
     print("\nLoading dataloaders...")
-    train_dataset, test_dataset = getTrainTestDataLoader(data_config)
+    train_dataset, test_dataset = getTrainTestDataLoaderMM(data_config)
 
     print("\nRunning preprocessing...")
     X_train, y_train, X_test, y_test, scaler = preprocess_for_tcn(
-        train_dataset,
-        test_dataset,
-        tcn_config,
-        verbose=True
+        train_dataset, test_dataset, tcn_config, verbose=True
     )
 
     print("\nSample shapes:")
     print(f"  X_train[0]: {X_train[0].shape}")
     print(f"  y_train[0]: {y_train[0]}")
-
-

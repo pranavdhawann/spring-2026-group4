@@ -1,0 +1,16 @@
+architecture:
+  name: "Google TimesFM-1.0-200m PyTorch"
+  repo_id: "google/timesfm-1.0-200m-pytorch"
+  backend: "gpu"  # Switch to cpu if running on Colab standard tier without GPU
+
+timesfm:
+  context_len: 60
+  horizon_len: 5
+  input_patch_len: 8
+  output_patch_len: 128
+  num_layers: 20
+  model_dims: 1280
+
+evaluation:
+  batch_size: 8
+  target_idx: 3    # Assuming target feature 'Close' is at index 3 in X
