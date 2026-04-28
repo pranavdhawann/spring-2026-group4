@@ -1,4 +1,2 @@
-﻿# Demo
-
-Interactive demos and lightweight inference examples for model outputs.
-This folder is intended for quick validation and stakeholder-facing previews.
+﻿# Run the demo
+python -m streamlit run demo/app.py --server.headless true --server.port 8501
